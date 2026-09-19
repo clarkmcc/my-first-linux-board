@@ -136,16 +136,18 @@ prompt. Confirm `usb0` is `192.168.7.2/24` and the host receives an address from
 link. Then test from the host:
 
 ```sh
-curl http://192.168.7.2/cgi-bin/status
+curl http://192.168.7.2/cgi-bin/metrics
 ssh root@192.168.7.2
 ```
 
-Open `http://192.168.7.2/` and confirm CPU, memory, uptime, load, kernel, and LED
-status update. The SSH password is blank on this directly attached development
-image. Reboot once and verify the SSH fingerprint remains stable because its
-generated host key is stored on the FAT boot partition. Disconnect and reconnect
-the host several times; UART must remain usable and the USB getty must not enter
-a rapid restart loop.
+Confirm the metrics response uses Prometheus text format and includes board,
+CPU, memory, filesystem, microSD, network, service, USB gadget, and LED series.
+Confirm `/` returns 404 because metrics are the only HTTP resource. The SSH
+password is blank on this directly attached development image. Reboot once and
+verify the SSH fingerprint remains stable because its generated host key is
+stored on the FAT boot partition. Disconnect and reconnect the host several
+times; UART must remain usable and the USB getty must not enter a rapid restart
+loop.
 
 ## Failure localization
 

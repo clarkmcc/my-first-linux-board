@@ -1,0 +1,468 @@
+#!/bin/sh
+
+# This kernel exports /proc/stat accounting in USER_HZ units. ARM includes the
+# asm-generic userspace ABI, where __USER_HZ is fixed at 100.
+clk_tck=100
+proc_root=${PROC_ROOT:-/proc}
+sys_root=${SYS_ROOT:-/sys}
+root_path=${ROOT_PATH:-/}
+boot_path=${BOOT_PATH:-/boot}
+
+LC_ALL=C
+export LC_ALL
+
+if [ -n "${PATH_INFO:-}" ]; then
+	printf 'Status: 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nNot found\n'
+	exit 0
+fi
+
+printf '%s\r\n\r\n' 'Content-Type: text/plain; version=0.0.4; charset=utf-8'
+
+metadata() {
+	printf '# HELP %s %s\n# TYPE %s %s\n' "$1" "$2" "$1" "$3"
+}
+
+escape_label() {
+	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+read_value() {
+	[ -r "$1" ] || return 1
+	value=$(cat "$1" 2>/dev/null) || return 1
+	[ -n "$value" ] || return 1
+	printf '%s' "$value"
+}
+
+numeric_value() {
+	value=$(read_value "$1") || return 1
+	case "$value" in
+		''|*[!0-9.-]*) return 1 ;;
+	esac
+	printf '%s' "$value"
+}
+
+model=unknown
+if [ -r "$proc_root/device-tree/model" ]; then
+	model=$(tr -d '\000\r\n' < "$proc_root/device-tree/model")
+fi
+hostname_value=$(hostname 2>/dev/null || printf unknown)
+kernel=$(uname -r 2>/dev/null || printf unknown)
+metadata clarks_board_info 'Static identity information for the board.' gauge
+printf 'clarks_board_info{model="%s",hostname="%s",kernel_release="%s"} 1\n' \
+	"$(escape_label "$model")" "$(escape_label "$hostname_value")" "$(escape_label "$kernel")"
+
+metadata clarks_board_time_seconds 'Current wall-clock time in seconds since the Unix epoch.' gauge
+printf 'clarks_board_time_seconds %s\n' "$(date +%s)"
+
+awk -v ticks="$clk_tck" \
+	-v uptime_file="$proc_root/uptime" \
+	-v load_file="$proc_root/loadavg" \
+	-v stat_file="$proc_root/stat" \
+	-v mem_file="$proc_root/meminfo" \
+	-v vm_file="$proc_root/vmstat" '
+BEGIN {
+	print "# HELP clarks_board_uptime_seconds Time since boot in seconds."
+	print "# TYPE clarks_board_uptime_seconds gauge"
+	print "# HELP clarks_board_boot_time_seconds Boot time in seconds since the Unix epoch; zero is valid before the clock is set."
+	print "# TYPE clarks_board_boot_time_seconds gauge"
+	print "# HELP clarks_board_cpu_seconds_total CPU time consumed in each mode."
+	print "# TYPE clarks_board_cpu_seconds_total counter"
+	print "# HELP clarks_board_cpu_count Number of logical CPUs exported by the kernel."
+	print "# TYPE clarks_board_cpu_count gauge"
+	print "# HELP clarks_board_load_average Runnable-queue load average."
+	print "# TYPE clarks_board_load_average gauge"
+	print "# HELP clarks_board_memory_bytes Memory quantity by field in bytes."
+	print "# TYPE clarks_board_memory_bytes gauge"
+	print "# HELP clarks_board_processes_running Number of processes currently runnable."
+	print "# TYPE clarks_board_processes_running gauge"
+	print "# HELP clarks_board_processes_blocked Number of processes currently blocked on I/O."
+	print "# TYPE clarks_board_processes_blocked gauge"
+	print "# HELP clarks_board_process_forks_total Processes forked since boot."
+	print "# TYPE clarks_board_process_forks_total counter"
+	print "# HELP clarks_board_context_switches_total Context switches since boot."
+	print "# TYPE clarks_board_context_switches_total counter"
+	print "# HELP clarks_board_interrupts_total Interrupts serviced since boot."
+	print "# TYPE clarks_board_interrupts_total counter"
+	print "# HELP clarks_board_vmstat_page_in_bytes_total Bytes paged in according to /proc/vmstat."
+	print "# TYPE clarks_board_vmstat_page_in_bytes_total counter"
+	print "# HELP clarks_board_vmstat_page_out_bytes_total Bytes paged out according to /proc/vmstat."
+	print "# TYPE clarks_board_vmstat_page_out_bytes_total counter"
+	print "# HELP clarks_board_vmstat_page_faults_total Page faults since boot."
+	print "# TYPE clarks_board_vmstat_page_faults_total counter"
+	print "# HELP clarks_board_vmstat_major_page_faults_total Major page faults since boot."
+	print "# TYPE clarks_board_vmstat_major_page_faults_total counter"
+	print "# HELP clarks_board_vmstat_swap_pages_in_total Swap pages read since boot."
+	print "# TYPE clarks_board_vmstat_swap_pages_in_total counter"
+	print "# HELP clarks_board_vmstat_swap_pages_out_total Swap pages written since boot."
+	print "# TYPE clarks_board_vmstat_swap_pages_out_total counter"
+	print "# HELP clarks_board_vmstat_pages_freed_total Pages freed since boot."
+	print "# TYPE clarks_board_vmstat_pages_freed_total counter"
+	print "# HELP clarks_board_vmstat_oom_kills_total Tasks killed by the out-of-memory killer."
+	print "# TYPE clarks_board_vmstat_oom_kills_total counter"
+	mode[2]="user"; mode[3]="nice"; mode[4]="system"; mode[5]="idle"; mode[6]="iowait"
+	mode[7]="irq"; mode[8]="softirq"; mode[9]="steal"; mode[10]="guest"; mode[11]="guest_nice"
+	mem["MemTotal:"]="total"; mem["MemFree:"]="free"; mem["MemAvailable:"]="available"
+	mem["Buffers:"]="buffers"; mem["Cached:"]="cached"; mem["SReclaimable:"]="slab_reclaimable"
+	mem["Shmem:"]="shared"; mem["SwapTotal:"]="swap_total"; mem["SwapFree:"]="swap_free"
+	mem["Dirty:"]="dirty"; mem["Writeback:"]="writeback"; mem["Slab:"]="slab"
+}
+FILENAME == uptime_file { printf "clarks_board_uptime_seconds %.2f\n", $1; next }
+FILENAME == load_file {
+	printf "clarks_board_load_average{period=\"1m\"} %s\n", $1
+	printf "clarks_board_load_average{period=\"5m\"} %s\n", $2
+	printf "clarks_board_load_average{period=\"15m\"} %s\n", $3
+	next
+}
+FILENAME == mem_file && ($1 in mem) {
+	printf "clarks_board_memory_bytes{field=\"%s\"} %.0f\n", mem[$1], $2 * 1024
+	next
+}
+FILENAME == stat_file {
+	if ($1 == "cpu") {
+		for (i = 2; i <= 11 && i <= NF; i++)
+			printf "clarks_board_cpu_seconds_total{mode=\"%s\"} %.2f\n", mode[i], $i / ticks
+	} else if ($1 ~ /^cpu[0-9]+$/) {
+		cpu_count++
+	} else if ($1 == "btime") {
+		printf "clarks_board_boot_time_seconds %s\n", $2
+	} else if ($1 == "processes") {
+		printf "clarks_board_process_forks_total %s\n", $2
+	} else if ($1 == "procs_running") {
+		printf "clarks_board_processes_running %s\n", $2
+	} else if ($1 == "procs_blocked") {
+		printf "clarks_board_processes_blocked %s\n", $2
+	} else if ($1 == "ctxt") {
+		printf "clarks_board_context_switches_total %s\n", $2
+	} else if ($1 == "intr") {
+		printf "clarks_board_interrupts_total %s\n", $2
+	}
+	next
+}
+FILENAME == vm_file {
+	if ($1 == "pgpgin") printf "clarks_board_vmstat_page_in_bytes_total %.0f\n", $2 * 1024
+	else if ($1 == "pgpgout") printf "clarks_board_vmstat_page_out_bytes_total %.0f\n", $2 * 1024
+	else if ($1 == "pgfault") printf "clarks_board_vmstat_page_faults_total %s\n", $2
+	else if ($1 == "pgmajfault") printf "clarks_board_vmstat_major_page_faults_total %s\n", $2
+	else if ($1 == "pswpin") printf "clarks_board_vmstat_swap_pages_in_total %s\n", $2
+	else if ($1 == "pswpout") printf "clarks_board_vmstat_swap_pages_out_total %s\n", $2
+	else if ($1 == "pgfree") printf "clarks_board_vmstat_pages_freed_total %s\n", $2
+	else if ($1 == "oom_kill") printf "clarks_board_vmstat_oom_kills_total %s\n", $2
+}
+END { printf "clarks_board_cpu_count %d\n", cpu_count }
+' "$proc_root/uptime" "$proc_root/loadavg" "$proc_root/stat" "$proc_root/meminfo" "$proc_root/vmstat" 2>/dev/null
+
+pressure_files=
+for resource in cpu memory io; do
+	[ -r "$proc_root/pressure/$resource" ] && pressure_files="$pressure_files $proc_root/pressure/$resource"
+done
+if [ -n "$pressure_files" ]; then
+	awk '
+	BEGIN {
+		print "# HELP clarks_board_pressure_stall_ratio Recent fraction of wall time lost to pressure stalls."
+		print "# TYPE clarks_board_pressure_stall_ratio gauge"
+		print "# HELP clarks_board_pressure_stall_seconds_total Cumulative time lost to pressure stalls."
+		print "# TYPE clarks_board_pressure_stall_seconds_total counter"
+	}
+	{
+		n = split(FILENAME, path, "/"); resource = path[n]; scope = $1
+		for (i = 2; i <= NF; i++) {
+			split($i, pair, "=")
+			if (pair[1] ~ /^avg(10|60|300)$/) {
+				window = substr(pair[1], 4)
+				printf "clarks_board_pressure_stall_ratio{resource=\"%s\",scope=\"%s\",window_seconds=\"%s\"} %.6f\n", resource, scope, window, pair[2] / 100
+			} else if (pair[1] == "total") {
+				printf "clarks_board_pressure_stall_seconds_total{resource=\"%s\",scope=\"%s\"} %.6f\n", resource, scope, pair[2] / 1000000
+			}
+		}
+	}' $pressure_files
+fi
+
+metadata clarks_board_filesystem_size_bytes 'Filesystem capacity in bytes.' gauge
+metadata clarks_board_filesystem_free_bytes 'Filesystem free space in bytes, including reserved blocks.' gauge
+metadata clarks_board_filesystem_avail_bytes 'Filesystem space available to unprivileged users in bytes.' gauge
+metadata clarks_board_filesystem_files 'Total filesystem inode count.' gauge
+metadata clarks_board_filesystem_files_free 'Free filesystem inode count.' gauge
+metadata clarks_board_filesystem_readonly 'Whether the filesystem is mounted read-only.' gauge
+emit_filesystem() {
+	mountpoint=$1
+	path=$2
+	set -- $(stat -f -c '%b %f %a %S %c %d' "$path" 2>/dev/null) || return
+	[ "$#" -eq 6 ] || return
+	blocks=$1 free=$2 avail=$3 block_size=$4 files=$5 files_free=$6
+	set -- $(awk -v mountpoint="$mountpoint" '
+		$2 == mountpoint {
+			readonly = 0; count = split($4, options, ",")
+			for (i = 1; i <= count; i++) if (options[i] == "ro") readonly = 1
+			print $3, readonly; exit
+		}' "$proc_root/mounts" 2>/dev/null)
+	fstype=${1:-unknown}
+	readonly=${2:-0}
+	labels="mountpoint=\"$(escape_label "$mountpoint")\",fstype=\"$(escape_label "$fstype")\""
+	printf 'clarks_board_filesystem_size_bytes{%s} %.0f\n' "$labels" "$((blocks * block_size))"
+	printf 'clarks_board_filesystem_free_bytes{%s} %.0f\n' "$labels" "$((free * block_size))"
+	printf 'clarks_board_filesystem_avail_bytes{%s} %.0f\n' "$labels" "$((avail * block_size))"
+	printf 'clarks_board_filesystem_files{%s} %s\n' "$labels" "$files"
+	printf 'clarks_board_filesystem_files_free{%s} %s\n' "$labels" "$files_free"
+	printf 'clarks_board_filesystem_readonly{%s} %s\n' "$labels" "$readonly"
+}
+emit_filesystem / "$root_path"
+emit_filesystem /boot "$boot_path"
+
+awk '
+BEGIN {
+	print "# HELP clarks_board_disk_reads_total Completed block-device reads."
+	print "# TYPE clarks_board_disk_reads_total counter"
+	print "# HELP clarks_board_disk_reads_merged_total Merged block-device reads."
+	print "# TYPE clarks_board_disk_reads_merged_total counter"
+	print "# HELP clarks_board_disk_read_bytes_total Bytes read from the block device."
+	print "# TYPE clarks_board_disk_read_bytes_total counter"
+	print "# HELP clarks_board_disk_read_seconds_total Time spent reading from the block device."
+	print "# TYPE clarks_board_disk_read_seconds_total counter"
+	print "# HELP clarks_board_disk_writes_total Completed block-device writes."
+	print "# TYPE clarks_board_disk_writes_total counter"
+	print "# HELP clarks_board_disk_writes_merged_total Merged block-device writes."
+	print "# TYPE clarks_board_disk_writes_merged_total counter"
+	print "# HELP clarks_board_disk_written_bytes_total Bytes written to the block device."
+	print "# TYPE clarks_board_disk_written_bytes_total counter"
+	print "# HELP clarks_board_disk_write_seconds_total Time spent writing to the block device."
+	print "# TYPE clarks_board_disk_write_seconds_total counter"
+	print "# HELP clarks_board_disk_io_now Block I/O operations currently in progress."
+	print "# TYPE clarks_board_disk_io_now gauge"
+	print "# HELP clarks_board_disk_io_seconds_total Time spent doing block I/O."
+	print "# TYPE clarks_board_disk_io_seconds_total counter"
+	print "# HELP clarks_board_disk_io_weighted_seconds_total Weighted time spent doing block I/O."
+	print "# TYPE clarks_board_disk_io_weighted_seconds_total counter"
+	print "# HELP clarks_board_disk_discards_total Completed discard operations."
+	print "# TYPE clarks_board_disk_discards_total counter"
+	print "# HELP clarks_board_disk_discarded_bytes_total Bytes discarded from the block device."
+	print "# TYPE clarks_board_disk_discarded_bytes_total counter"
+	print "# HELP clarks_board_disk_flushes_total Completed flush requests."
+	print "# TYPE clarks_board_disk_flushes_total counter"
+	print "# HELP clarks_board_disk_flush_seconds_total Time spent servicing flush requests."
+	print "# TYPE clarks_board_disk_flush_seconds_total counter"
+}
+$3 == "mmcblk0" {
+	label="{device=\"mmcblk0\"}"
+	printf "clarks_board_disk_reads_total%s %s\n", label, $4
+	printf "clarks_board_disk_reads_merged_total%s %s\n", label, $5
+	printf "clarks_board_disk_read_bytes_total%s %.0f\n", label, $6 * 512
+	printf "clarks_board_disk_read_seconds_total%s %.3f\n", label, $7 / 1000
+	printf "clarks_board_disk_writes_total%s %s\n", label, $8
+	printf "clarks_board_disk_writes_merged_total%s %s\n", label, $9
+	printf "clarks_board_disk_written_bytes_total%s %.0f\n", label, $10 * 512
+	printf "clarks_board_disk_write_seconds_total%s %.3f\n", label, $11 / 1000
+	printf "clarks_board_disk_io_now%s %s\n", label, $12
+	printf "clarks_board_disk_io_seconds_total%s %.3f\n", label, $13 / 1000
+	printf "clarks_board_disk_io_weighted_seconds_total%s %.3f\n", label, $14 / 1000
+	if (NF >= 18) {
+		printf "clarks_board_disk_discards_total%s %s\n", label, $15
+		printf "clarks_board_disk_discarded_bytes_total%s %.0f\n", label, $17 * 512
+	}
+	if (NF >= 20) {
+		printf "clarks_board_disk_flushes_total%s %s\n", label, $19
+		printf "clarks_board_disk_flush_seconds_total%s %.3f\n", label, $20 / 1000
+	}
+}
+' "$proc_root/diskstats" 2>/dev/null
+
+awk '
+BEGIN {
+	print "# HELP clarks_board_network_receive_bytes_total Bytes received by the network interface."
+	print "# TYPE clarks_board_network_receive_bytes_total counter"
+	print "# HELP clarks_board_network_receive_packets_total Packets received by the network interface."
+	print "# TYPE clarks_board_network_receive_packets_total counter"
+	print "# HELP clarks_board_network_receive_errors_total Receive errors reported by the network interface."
+	print "# TYPE clarks_board_network_receive_errors_total counter"
+	print "# HELP clarks_board_network_receive_drops_total Receive drops reported by the network interface."
+	print "# TYPE clarks_board_network_receive_drops_total counter"
+	print "# HELP clarks_board_network_transmit_bytes_total Bytes transmitted by the network interface."
+	print "# TYPE clarks_board_network_transmit_bytes_total counter"
+	print "# HELP clarks_board_network_transmit_packets_total Packets transmitted by the network interface."
+	print "# TYPE clarks_board_network_transmit_packets_total counter"
+	print "# HELP clarks_board_network_transmit_errors_total Transmit errors reported by the network interface."
+	print "# TYPE clarks_board_network_transmit_errors_total counter"
+	print "# HELP clarks_board_network_transmit_drops_total Transmit drops reported by the network interface."
+	print "# TYPE clarks_board_network_transmit_drops_total counter"
+}
+NR > 2 {
+	gsub(/:/, "", $1); interface=$1
+	if (interface != "lo" && interface != "usb0") next
+	label="{interface=\"" interface "\"}"
+	printf "clarks_board_network_receive_bytes_total%s %s\n", label, $2
+	printf "clarks_board_network_receive_packets_total%s %s\n", label, $3
+	printf "clarks_board_network_receive_errors_total%s %s\n", label, $4
+	printf "clarks_board_network_receive_drops_total%s %s\n", label, $5
+	printf "clarks_board_network_transmit_bytes_total%s %s\n", label, $10
+	printf "clarks_board_network_transmit_packets_total%s %s\n", label, $11
+	printf "clarks_board_network_transmit_errors_total%s %s\n", label, $12
+	printf "clarks_board_network_transmit_drops_total%s %s\n", label, $13
+}
+' "$proc_root/net/dev" 2>/dev/null
+
+metadata clarks_board_network_admin_up 'Whether the bounded network interface is administratively up.' gauge
+metadata clarks_board_network_operstate_info 'Kernel operstate information for the bounded network interface.' gauge
+metadata clarks_board_network_carrier 'Whether the bounded network interface has carrier.' gauge
+metadata clarks_board_network_mtu_bytes 'Configured network interface MTU in bytes.' gauge
+for interface in lo usb0; do
+	interface_dir="$sys_root/class/net/$interface"
+	[ -d "$interface_dir" ] || continue
+	state=$(read_value "$interface_dir/operstate" 2>/dev/null || printf unknown)
+	flags=$(read_value "$interface_dir/flags" 2>/dev/null || printf 0)
+	admin_up=$((flags & 1))
+	printf 'clarks_board_network_admin_up{interface="%s"} %s\n' "$interface" "$admin_up"
+	printf 'clarks_board_network_operstate_info{interface="%s",state="%s"} 1\n' \
+		"$interface" "$(escape_label "$state")"
+	if carrier=$(numeric_value "$interface_dir/carrier" 2>/dev/null); then
+		printf 'clarks_board_network_carrier{interface="%s"} %s\n' "$interface" "$carrier"
+	fi
+	if mtu=$(numeric_value "$interface_dir/mtu" 2>/dev/null); then
+		printf 'clarks_board_network_mtu_bytes{interface="%s"} %s\n' "$interface" "$mtu"
+	fi
+done
+
+awk '
+BEGIN {
+	print "# HELP clarks_board_socket_count Kernel socket count by protocol and state."
+	print "# TYPE clarks_board_socket_count gauge"
+}
+{
+	protocol=tolower($1); sub(/:$/, "", protocol)
+	if (protocol != "sockets" && protocol != "tcp" && protocol != "udp") next
+	for (i = 2; i < NF; i += 2) {
+		state=$i; value=$(i + 1)
+		allowed=(protocol == "sockets" && state == "used") ||
+			(protocol == "tcp" && state ~ /^(inuse|orphan|tw|alloc|mem)$/) ||
+			(protocol == "udp" && state ~ /^(inuse|mem)$/)
+		if (allowed) printf "clarks_board_socket_count{protocol=\"%s\",state=\"%s\"} %s\n", protocol, state, value
+	}
+}
+' "$proc_root/net/sockstat" 2>/dev/null
+
+awk '
+BEGIN {
+	print "# HELP clarks_board_tcp_connections_total TCP connection events."
+	print "# TYPE clarks_board_tcp_connections_total counter"
+	print "# HELP clarks_board_tcp_current_established Currently established TCP connections."
+	print "# TYPE clarks_board_tcp_current_established gauge"
+	print "# HELP clarks_board_tcp_segments_total TCP segment events."
+	print "# TYPE clarks_board_tcp_segments_total counter"
+	print "# HELP clarks_board_tcp_errors_total TCP error and reset events."
+	print "# TYPE clarks_board_tcp_errors_total counter"
+	print "# HELP clarks_board_udp_datagrams_total UDP datagram events."
+	print "# TYPE clarks_board_udp_datagrams_total counter"
+	print "# HELP clarks_board_udp_errors_total UDP error events."
+	print "# TYPE clarks_board_udp_errors_total counter"
+}
+$1 == "Tcp:" && !tcp_header {
+	for (i = 2; i <= NF; i++) tcp_name[i]=$i
+	tcp_header=1; next
+}
+$1 == "Tcp:" && tcp_header {
+	for (i = 2; i <= NF; i++) {
+		name=tcp_name[i]; value=$i
+		if (name == "ActiveOpens") printf "clarks_board_tcp_connections_total{event=\"active_open\"} %s\n", value
+		else if (name == "PassiveOpens") printf "clarks_board_tcp_connections_total{event=\"passive_open\"} %s\n", value
+		else if (name == "AttemptFails") printf "clarks_board_tcp_connections_total{event=\"attempt_failed\"} %s\n", value
+		else if (name == "EstabResets") printf "clarks_board_tcp_connections_total{event=\"established_reset\"} %s\n", value
+		else if (name == "CurrEstab") printf "clarks_board_tcp_current_established %s\n", value
+		else if (name == "InSegs") printf "clarks_board_tcp_segments_total{direction=\"in\"} %s\n", value
+		else if (name == "OutSegs") printf "clarks_board_tcp_segments_total{direction=\"out\"} %s\n", value
+		else if (name == "RetransSegs") printf "clarks_board_tcp_segments_total{direction=\"retransmitted\"} %s\n", value
+		else if (name == "InErrs") printf "clarks_board_tcp_errors_total{kind=\"input\"} %s\n", value
+		else if (name == "OutRsts") printf "clarks_board_tcp_errors_total{kind=\"reset_sent\"} %s\n", value
+	}
+	next
+}
+$1 == "Udp:" && !udp_header {
+	for (i = 2; i <= NF; i++) udp_name[i]=$i
+	udp_header=1; next
+}
+$1 == "Udp:" && udp_header {
+	for (i = 2; i <= NF; i++) {
+		name=udp_name[i]; value=$i
+		if (name == "InDatagrams") printf "clarks_board_udp_datagrams_total{direction=\"in\"} %s\n", value
+		else if (name == "OutDatagrams") printf "clarks_board_udp_datagrams_total{direction=\"out\"} %s\n", value
+		else if (name == "NoPorts") printf "clarks_board_udp_errors_total{kind=\"no_port\"} %s\n", value
+		else if (name == "InErrors") printf "clarks_board_udp_errors_total{kind=\"input\"} %s\n", value
+		else if (name == "RcvbufErrors") printf "clarks_board_udp_errors_total{kind=\"receive_buffer\"} %s\n", value
+		else if (name == "SndbufErrors") printf "clarks_board_udp_errors_total{kind=\"send_buffer\"} %s\n", value
+		else if (name == "InCsumErrors") printf "clarks_board_udp_errors_total{kind=\"checksum\"} %s\n", value
+		else if (name == "IgnoredMulti") printf "clarks_board_udp_errors_total{kind=\"ignored_multicast\"} %s\n", value
+	}
+}
+' "$proc_root/net/snmp" 2>/dev/null
+
+if entropy=$(numeric_value "$proc_root/sys/kernel/random/entropy_avail" 2>/dev/null); then
+	metadata clarks_board_entropy_available_bits 'Entropy currently available to the kernel random pool in bits.' gauge
+	printf 'clarks_board_entropy_available_bits %s\n' "$entropy"
+fi
+
+led_dir="$sys_root/class/leds/boot-console:green:status"
+if [ -d "$led_dir" ]; then
+	metadata clarks_board_led_brightness 'Current status LED brightness.' gauge
+	metadata clarks_board_led_max_brightness 'Maximum status LED brightness.' gauge
+	metadata clarks_board_led_trigger_info 'Selected status LED kernel trigger.' gauge
+	brightness=$(numeric_value "$led_dir/brightness" 2>/dev/null || printf 0)
+	max_brightness=$(numeric_value "$led_dir/max_brightness" 2>/dev/null || printf 0)
+	trigger=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\[/) { gsub(/^\[|\]$/, "", $i); print $i; exit } }' "$led_dir/trigger" 2>/dev/null)
+	printf 'clarks_board_led_brightness{led="status"} %s\n' "$brightness"
+	printf 'clarks_board_led_max_brightness{led="status"} %s\n' "$max_brightness"
+	printf 'clarks_board_led_trigger_info{led="status",trigger="%s"} 1\n' "$(escape_label "$trigger")"
+fi
+
+metadata clarks_board_service_up 'Whether a bounded board service has a running process.' gauge
+for service in dropbear httpd udhcpd; do
+	up=0
+	pidof "$service" >/dev/null 2>&1 && up=1
+	printf 'clarks_board_service_up{service="%s"} %s\n' "$service" "$up"
+done
+
+metadata clarks_board_usb_gadget_bound 'Whether the USB gadget is bound to a UDC.' gauge
+metadata clarks_board_usb_gadget_carrier 'Whether the USB ECM gadget interface has carrier.' gauge
+bound=0
+udc_file="$sys_root/kernel/config/usb_gadget/clarks-board/UDC"
+if [ -r "$udc_file" ]; then
+	udc=$(read_value "$udc_file" 2>/dev/null || true)
+	[ -n "$udc" ] && bound=1
+fi
+printf 'clarks_board_usb_gadget_bound %s\n' "$bound"
+if carrier=$(numeric_value "$sys_root/class/net/usb0/carrier" 2>/dev/null); then
+	printf 'clarks_board_usb_gadget_carrier %s\n' "$carrier"
+fi
+
+thermal_metadata=0
+for zone_number in 0 1 2 3; do
+	zone="$sys_root/class/thermal/thermal_zone$zone_number"
+	[ -r "$zone/temp" ] || continue
+	if [ "$thermal_metadata" = 0 ]; then
+		metadata clarks_board_thermal_temperature_celsius 'Thermal-zone temperature in degrees Celsius.' gauge
+		thermal_metadata=1
+	fi
+	temperature=$(numeric_value "$zone/temp" 2>/dev/null) || continue
+	type=$(read_value "$zone/type" 2>/dev/null || printf unknown)
+	awk -v zone="$zone_number" -v type="$(escape_label "$type")" -v value="$temperature" \
+		'BEGIN { printf "clarks_board_thermal_temperature_celsius{zone=\"%s\",type=\"%s\"} %.3f\n", zone, type, value / 1000 }'
+done
+
+cpufreq="$sys_root/devices/system/cpu/cpu0/cpufreq"
+if [ -d "$cpufreq" ]; then
+	metadata clarks_board_cpu_frequency_hertz 'CPU frequency by bound in hertz.' gauge
+	for item in scaling_cur_freq:current cpuinfo_min_freq:minimum cpuinfo_max_freq:maximum; do
+		file=${item%%:*}
+		kind=${item#*:}
+		frequency=$(numeric_value "$cpufreq/$file" 2>/dev/null) || continue
+		printf 'clarks_board_cpu_frequency_hertz{cpu="0",kind="%s"} %s000\n' "$kind" "$frequency"
+	done
+fi
+
+watchdog="$sys_root/class/watchdog/watchdog0"
+if [ -d "$watchdog" ]; then
+	metadata clarks_board_watchdog_info 'Watchdog identity information.' gauge
+	identity=$(read_value "$watchdog/identity" 2>/dev/null || printf unknown)
+	printf 'clarks_board_watchdog_info{watchdog="0",identity="%s"} 1\n' "$(escape_label "$identity")"
+	metadata clarks_board_watchdog_value 'Numeric watchdog state by field.' gauge
+	for item in timeout timeleft status nowayout; do
+		value=$(numeric_value "$watchdog/$item" 2>/dev/null) || continue
+		printf 'clarks_board_watchdog_value{watchdog="0",field="%s"} %s\n' "$item" "$value"
+	done
+fi

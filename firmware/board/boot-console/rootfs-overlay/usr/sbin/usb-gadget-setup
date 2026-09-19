@@ -50,7 +50,8 @@ while :; do
 	sleep 1
 done
 
-if [ ! -s "$gadget/UDC" ]; then
+bound_udc=$(cat "$gadget/UDC" 2>/dev/null || true)
+if [ -z "$bound_udc" ]; then
 	echo "$udc" > "$gadget/UDC"
 fi
 

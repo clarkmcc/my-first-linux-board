@@ -32,9 +32,42 @@ the UDC and network interface, so it never blocks the UART login or startup.
 
 The board uses `192.168.7.2/24`. BusyBox `udhcpd` leases
 `192.168.7.10`–`192.168.7.20` to the attached host and deliberately sends no
-router or DNS option. Dropbear SSH and the BusyBox HTTP status page listen on the
-link. The web UI is at `http://192.168.7.2/`; its JSON data is available at
-`http://192.168.7.2/cgi-bin/status`.
+router or DNS option. Dropbear SSH and a BusyBox HTTP Prometheus endpoint listen
+on the link. `/cgi-bin/metrics` is the only HTTP resource; `/` and every other
+path intentionally return 404. The endpoint emits Prometheus 0.0.4 text for
+board identity, time, CPU, load, memory, VM, pressure, filesystems, microSD,
+networking, sockets, entropy, LED state, services, USB gadget state, and any
+available thermal, CPU-frequency, and watchdog data:
+
+```sh
+curl http://192.168.7.2/cgi-bin/metrics
+```
+
+macOS may enumerate ECM before Network Settings creates a service. Find the
+interface whose `ether` address is `02:00:00:00:07:01`, assign the host side
+`192.168.7.1` for immediate access, and ask macOS to detect the new hardware:
+
+```sh
+iface=$(for interface in $(ifconfig -l); do
+  ifconfig "$interface" | grep -q 'ether 02:00:00:00:07:01' && echo "$interface"
+done)
+sudo ifconfig "$iface" inet 192.168.7.1 netmask 255.255.255.0 up
+sudo networksetup -detectnewhardware
+```
+
+The direct address lasts until the interface is removed or reconfigured. After
+`networksetup -detectnewhardware` creates the service, give it the persistent
+static address used by this direct link. The service on the tested Mac is named
+`Clark's Board Console + Ethernet`:
+
+```sh
+sudo networksetup -setmanual "Clark's Board Console + Ethernet" \
+  192.168.7.1 255.255.255.0 0.0.0.0
+```
+
+If macOS uses a different service name, find it with
+`networksetup -listallnetworkservices` and substitute that name. DHCP did not
+activate this ECM link reliably, so keep the host address static.
 
 The Buildroot configuration enables root login with an empty password. Pinned
 Buildroot 2026.02.2 intentionally has no `/etc/securetty`, so BusyBox does not

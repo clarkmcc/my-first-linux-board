@@ -297,8 +297,10 @@ initialize. Use the host operating system's normal USB-device inspection after
 connecting the native USB port; do not expect `lsusb` on this tiny target. The
 conceptual result is two terminal paths with different initialization
 dependencies, plus a network link that exists only after the composite gadget
-and host ECM driver are ready. From the host, `http://192.168.7.2/` shows the
-live status page and `ssh root@192.168.7.2` reaches the same target shell.
+and host ECM driver are ready. From the host,
+`http://192.168.7.2/cgi-bin/metrics` exposes Prometheus text metrics and
+`ssh root@192.168.7.2` reaches the same target shell. The HTTP root returns 404
+because the metrics endpoint is the only served resource.
 
 ## What the successful build proves
 

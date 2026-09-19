@@ -5,7 +5,8 @@ Boot Console. The first milestone boots U-Boot SPL, U-Boot, Linux, and BusyBox
 with a login on UART0 PE0/PE1 at 115200 8N1. UART is the primary bring-up and
 recovery console because it is available before Linux. Linux additionally
 offers a CDC ACM login and CDC ECM Ethernet on the native USB peripheral port.
-The board runs a live status page and Dropbear SSH at `192.168.7.2`.
+The board exposes Prometheus metrics at `/cgi-bin/metrics` and Dropbear SSH at
+`192.168.7.2`. No other HTTP resource is served.
 
 The network stack is limited to the directly attached USB link. A tiny DHCP
 server gives the host a `192.168.7.x` address without a gateway or DNS option,

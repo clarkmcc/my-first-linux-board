@@ -21,8 +21,12 @@ case "$1" in
 			kill "$(cat /run/udhcpd.pid)" 2>/dev/null || true
 			rm -f /run/udhcpd.pid
 		fi
-		if [ -e /sys/kernel/config/usb_gadget/clarks-board/UDC ]; then
-			echo "" > /sys/kernel/config/usb_gadget/clarks-board/UDC
+		udc_file=/sys/kernel/config/usb_gadget/clarks-board/UDC
+		if [ -e "$udc_file" ]; then
+			bound_udc=$(cat "$udc_file" 2>/dev/null || true)
+			if [ -n "$bound_udc" ]; then
+				echo "" > "$udc_file" 2>/dev/null || true
+			fi
 		fi
 		ifconfig usb0 down 2>/dev/null || true
 		;;

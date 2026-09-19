@@ -5,7 +5,7 @@ case "$1" in
 		if pidof httpd >/dev/null 2>&1; then
 			exit 0
 		fi
-		echo "Starting board status web interface"
+		echo "Starting Prometheus metrics endpoint"
 		httpd -p 80 -h /www
 		;;
 	stop)

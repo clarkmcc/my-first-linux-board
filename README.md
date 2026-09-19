@@ -46,11 +46,42 @@ UART0 is 115200 baud, 8 data bits, no parity, and one stop bit. Linux also
 creates a composite USB device with a CDC ACM console and a CDC ECM Ethernet
 link. The board is `192.168.7.2/24`; its small DHCP server assigns the attached
 host an address without advertising a default route or DNS server. On macOS,
-connect the USB-C port and then open:
+the gadget can enumerate before Network Settings creates a service. Find the
+interface whose MAC address is `02:00:00:00:07:01`, assign the host side
+`192.168.7.1` for immediate access, and ask macOS to detect the new hardware:
 
-```text
-http://192.168.7.2/
+```sh
+iface=$(for interface in $(ifconfig -l); do
+  ifconfig "$interface" | grep -q 'ether 02:00:00:00:07:01' && echo "$interface"
+done)
+sudo ifconfig "$iface" inet 192.168.7.1 netmask 255.255.255.0 up
+sudo networksetup -detectnewhardware
 ```
+
+This address lasts until the interface is removed or reconfigured. After
+`networksetup -detectnewhardware` creates the service, give it the persistent
+static address used by this direct link. The service on the tested Mac is named
+`Clark's Board Console + Ethernet`:
+
+```sh
+sudo networksetup -setmanual "Clark's Board Console + Ethernet" \
+  192.168.7.1 255.255.255.0 0.0.0.0
+```
+
+If macOS uses a different service name, find it with
+`networksetup -listallnetworkservices` and substitute that name. DHCP did not
+activate this ECM link reliably, so keep the host address static.
+
+Prometheus metrics are the only HTTP resource. Scrape them with:
+
+```sh
+curl http://192.168.7.2/cgi-bin/metrics
+```
+
+The endpoint uses the Prometheus 0.0.4 text format and reports board identity,
+time, CPU, load, memory, VM, pressure, filesystem, microSD, network, socket,
+entropy, LED, service, USB gadget, and available thermal, CPU-frequency, and
+watchdog data. The root URL and every other HTTP path intentionally return 404.
 
 SSH is available as `root` with a blank password:
 

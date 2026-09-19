@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -163,6 +165,129 @@ def check_dtb(dtb: Path) -> None:
         fail(f"{dtb}: SPI0 is enabled and conflicts with the PC0 status LED")
 
 
+def check_metrics_endpoint(board: Path) -> None:
+    web_root = board / "rootfs-overlay/www"
+    metrics = web_root / "cgi-bin/metrics"
+    files = {
+        path.relative_to(web_root).as_posix()
+        for path in web_root.rglob("*")
+        if path.is_file()
+    }
+    if files != {"cgi-bin/metrics"}:
+        fail(f"web root must contain only cgi-bin/metrics, found {sorted(files)}")
+    if not metrics.stat().st_mode & 0o111:
+        fail("Prometheus CGI endpoint is not executable")
+
+    environment = os.environ.copy()
+    environment.update({"PROC_ROOT": "/proc", "SYS_ROOT": "/sys", "ROOT_PATH": "/", "BOOT_PATH": "/"})
+    started = time.monotonic()
+    result = subprocess.run(
+        [metrics],
+        env=environment,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    elapsed = time.monotonic() - started
+    if result.returncode:
+        fail(f"Prometheus CGI exited {result.returncode}: {result.stderr.decode(errors='replace')}")
+    if elapsed >= 5:
+        fail(f"Prometheus CGI took {elapsed:.2f}s on the validation host")
+
+    header = b"Content-Type: text/plain; version=0.0.4; charset=utf-8\r\n\r\n"
+    if not result.stdout.startswith(header):
+        fail("Prometheus CGI lacks the exact text-format content type and header terminator")
+    body = result.stdout[len(header):].decode("utf-8")
+    if not body.endswith("\n"):
+        fail("Prometheus response body must end with a newline")
+    if "<html" in body.lower() or "application/json" in body.lower():
+        fail("Prometheus endpoint still contains the retired HTML or JSON interface")
+
+    help_positions: dict[str, int] = {}
+    type_positions: dict[str, int] = {}
+    sample_names: set[str] = set()
+    label = r'[A-Za-z_][A-Za-z0-9_]*="(?:\\.|[^"\\])*"'
+    labels = rf"\{{{label}(?:,{label})*\}}"
+    number = r"[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?"
+    sample_pattern = re.compile(rf"^([A-Za-z_:][A-Za-z0-9_:]*)(?:{labels})? ({number})$")
+
+    for position, line in enumerate(body.splitlines()):
+        if match := re.fullmatch(r"# HELP ([A-Za-z_:][A-Za-z0-9_:]*) .+", line):
+            name = match.group(1)
+            if name in help_positions:
+                fail(f"duplicate HELP for {name}")
+            help_positions[name] = position
+        elif match := re.fullmatch(r"# TYPE ([A-Za-z_:][A-Za-z0-9_:]*) (counter|gauge)", line):
+            name = match.group(1)
+            if name in type_positions:
+                fail(f"duplicate TYPE for {name}")
+            type_positions[name] = position
+        elif line.startswith("#"):
+            fail(f"unsupported Prometheus comment: {line}")
+        elif line:
+            match = sample_pattern.fullmatch(line)
+            if not match:
+                fail(f"malformed Prometheus sample or non-numeric value: {line}")
+            name = match.group(1)
+            sample_names.add(name)
+            if name not in help_positions or name not in type_positions:
+                fail(f"sample {name} lacks HELP or TYPE metadata")
+            if help_positions[name] > position or type_positions[name] > position:
+                fail(f"sample {name} appears before its HELP/TYPE metadata")
+
+    if set(help_positions) != set(type_positions):
+        fail("Prometheus HELP and TYPE families do not match")
+    required = {
+        "clarks_board_info",
+        "clarks_board_time_seconds",
+        "clarks_board_uptime_seconds",
+        "clarks_board_cpu_seconds_total",
+        "clarks_board_cpu_count",
+        "clarks_board_load_average",
+        "clarks_board_memory_bytes",
+        "clarks_board_filesystem_size_bytes",
+        "clarks_board_network_receive_bytes_total",
+        "clarks_board_socket_count",
+        "clarks_board_tcp_segments_total",
+        "clarks_board_udp_datagrams_total",
+        "clarks_board_entropy_available_bits",
+        "clarks_board_service_up",
+        "clarks_board_usb_gadget_bound",
+    }
+    missing = sorted(required - sample_names)
+    if missing:
+        fail(f"executed Prometheus endpoint lacks required samples: {missing}")
+
+    with tempfile.TemporaryDirectory() as directory:
+        fixture_sys = Path(directory) / "sys"
+        fixture_udc = fixture_sys / "kernel/config/usb_gadget/clarks-board/UDC"
+        fixture_udc.parent.mkdir(parents=True)
+        fixture_udc.write_text("musb-hdrc.1.auto\n")
+        fixture_environment = environment | {"SYS_ROOT": str(fixture_sys)}
+        fixture = subprocess.run(
+            [metrics],
+            env=fixture_environment,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        if fixture.returncode or b"clarks_board_usb_gadget_bound 1\n" not in fixture.stdout:
+            fail("Prometheus CGI does not report the clarks-board configfs UDC as bound")
+
+    path_info_environment = environment | {"PATH_INFO": "/unexpected"}
+    path_info = subprocess.run(
+        [metrics],
+        env=path_info_environment,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    if path_info.returncode or not path_info.stdout.startswith(b"Status: 404 Not Found\r\n"):
+        fail("Prometheus CGI does not reject an additional PATH_INFO segment with 404")
+    if b"clarks_board_" in path_info.stdout:
+        fail("Prometheus CGI exposes metrics on an additional PATH_INFO route")
+
+
 def check_board_source(board: Path) -> None:
     boot = (board / "boot.cmd").read_text()
     image = (board / "genimage.cfg").read_text()
@@ -173,8 +298,8 @@ def check_board_source(board: Path) -> None:
     dhcp = (board / "rootfs-overlay/etc/udhcpd.conf").read_text()
     dropbear = (board / "rootfs-overlay/etc/init.d/S50dropbear").read_text()
     web_service = (board / "rootfs-overlay/etc/init.d/S60webui").read_text()
-    web_page = (board / "rootfs-overlay/www/index.html").read_text()
-    status_cgi = (board / "rootfs-overlay/www/cgi-bin/status").read_text()
+    metrics = (board / "rootfs-overlay/www/cgi-bin/metrics").read_text()
+    post_build = (board / "post-build.sh").read_text()
     fstab = (board / "rootfs-overlay/etc/fstab").read_text()
     uboot_patch = (board / "patches/uboot/0001-suniv-licheepi-nano-name-clarks-board.patch").read_text()
     if "root=/dev/mmcblk0p2" not in boot or "rootfstype=ext4 ro" not in boot:
@@ -198,8 +323,12 @@ def check_board_source(board: Path) -> None:
             fail(f"composite USB gadget setup lacks {required!r}")
     if 'while [ ! -d /sys/class/net/usb0 ]' not in gadget or 'while :' not in gadget:
         fail("USB gadget setup does not tolerate delayed UDC/network creation")
+    if 'bound_udc=$(cat "$gadget/UDC" 2>/dev/null || true)' not in gadget or '[ -z "$bound_udc" ]' not in gadget:
+        fail("USB gadget setup does not check the UDC attribute content before binding")
     if 'usb-gadget-setup.pid' not in gadget_service or '>/dev/console 2>&1 &' not in gadget_service:
         fail("USB gadget setup is not started asynchronously with a runtime PID file")
+    if 'bound_udc=$(cat "$udc_file" 2>/dev/null || true)' not in gadget_service or '[ -n "$bound_udc" ]' not in gadget_service:
+        fail("USB gadget stop does not check the UDC attribute content before unbinding")
     for required in ("start 192.168.7.10", "end 192.168.7.20", "interface usb0", "option subnet 255.255.255.0"):
         if required not in dhcp:
             fail(f"USB DHCP configuration lacks {required!r}")
@@ -209,12 +338,16 @@ def check_board_source(board: Path) -> None:
         fail("Dropbear does not persist its host key or allow the documented blank development password")
     if 'httpd -p 80 -h /www' not in web_service:
         fail("BusyBox HTTPD service does not serve /www on port 80")
-    if 'my-first-linux-board' not in web_page or '/cgi-bin/status' not in web_page or '/proc/uptime' not in status_cgi or '/proc/meminfo' not in status_cgi:
-        fail("status web UI or live JSON endpoint is incomplete")
+    for required in ("Content-Type: text/plain; version=0.0.4; charset=utf-8", "clk_tck=100", "$6 * 512", "$10 * 512"):
+        if required not in metrics:
+            fail(f"Prometheus CGI lacks {required!r}")
+    if 'find "$target_dir/www" -type f ! -path "$metrics" -delete' not in post_build:
+        fail("post-build script does not enforce the one-endpoint web root")
     if not re.search(r"^/dev/mmcblk0p1\s+/boot\s+vfat\s+[^\n]*\brw\b", fstab, re.M):
         fail("FAT boot partition is not mounted read/write for the persistent SSH host key")
     if '-\tmodel = "Lichee Pi Nano";' not in uboot_patch or '+\tmodel = "Clark\'s Board";' not in uboot_patch:
         fail("U-Boot board-name patch does not set the model to Clark's Board")
+    check_metrics_endpoint(board)
 
 
 def same_region(image: Path, offset: int, payload: Path) -> bool:
@@ -258,6 +391,37 @@ def check_image(images: Path) -> None:
     boot_payload = sum((images / name).stat().st_size for name in ("zImage", "linux.dtb", "boot.scr"))
     if boot_payload > 15 * 1024 * 1024:
         fail("boot files leave less than 1 MiB for FAT metadata and allocation overhead")
+
+
+def check_rootfs_web(output: Path, board: Path) -> None:
+    debugfs = output / "host/sbin/debugfs"
+    if not debugfs.is_file():
+        fail(f"{debugfs}: required to inspect the generated root filesystem")
+    with tempfile.TemporaryDirectory() as directory:
+        destination = Path(directory) / "root"
+        destination.mkdir()
+        extracted = destination / "www"
+        result = subprocess.run(
+            [debugfs, "-R", f"rdump /www {destination}", output / "images/rootfs.ext4"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+            fail(f"debugfs could not extract /www from rootfs.ext4: {result.stderr}")
+        files = {
+            path.relative_to(extracted).as_posix()
+            for path in extracted.rglob("*")
+            if path.is_file()
+        }
+        if files != {"cgi-bin/metrics"}:
+            fail(f"rootfs.ext4 web root contains unexpected files: {sorted(files)}")
+        image_metrics = extracted / "cgi-bin/metrics"
+        source_metrics = board / "rootfs-overlay/www/cgi-bin/metrics"
+        if image_metrics.read_bytes() != source_metrics.read_bytes():
+            fail("rootfs.ext4 Prometheus CGI differs from the board overlay source")
+        if not image_metrics.stat().st_mode & 0o111:
+            fail("rootfs.ext4 Prometheus CGI endpoint is not executable")
 
 
 def overlaps(first: tuple[int, int], second: tuple[int, int]) -> bool:
@@ -406,13 +570,47 @@ def main() -> int:
         "CONFIG_SH_IS_ASH": "y",
         "CONFIG_HTTPD": "y",
         "CONFIG_FEATURE_HTTPD_CGI": "y",
+        "CONFIG_FEATURE_HTTPD_BASIC_AUTH": "n",
+        "CONFIG_STAT": "y",
+        "CONFIG_FEATURE_STAT_FORMAT": "y",
+        "CONFIG_AWK": "y",
+        "CONFIG_SED": "y",
+        "CONFIG_CAT": "y",
+        "CONFIG_TR": "y",
+        "CONFIG_DATE": "y",
+        "CONFIG_UNAME": "y",
+        "CONFIG_HOSTNAME": "y",
+        "CONFIG_PIDOF": "y",
+        "CONFIG_FEATURE_SH_MATH": "y",
+        "CONFIG_FEATURE_SH_MATH_64": "y",
         "CONFIG_UDHCPD": "y",
         "CONFIG_IFCONFIG": "y",
     })
+    if not any((output / path).is_symlink() or (output / path).is_file() for path in ("target/bin/stat", "target/usr/bin/stat")):
+        fail("resolved target filesystem lacks the enabled BusyBox stat applet")
+    target_web = output / "target/www"
+    target_web_files = {
+        path.relative_to(target_web).as_posix()
+        for path in target_web.rglob("*")
+        if path.is_file()
+    }
+    if target_web_files != {"cgi-bin/metrics"}:
+        fail(f"generated target web root contains unexpected files: {sorted(target_web_files)}")
+    if not (target_web / "cgi-bin/metrics").stat().st_mode & 0o111:
+        fail("generated Prometheus CGI endpoint is not executable")
+    user_hz_header = one_dir(
+        [path for path in (output / "build").glob("linux-*") if not path.name.startswith("linux-headers-")],
+        "Linux build directory",
+    ) / "include/uapi/asm-generic/param.h"
+    if not re.search(r"^#define __USER_HZ\s+100$", user_hz_header.read_text(), re.M):
+        fail(f"{user_hz_header}: metrics CPU tick conversion requires USER_HZ=100")
     board = Path(__file__).resolve().parents[1] / "board/boot-console"
+    if (target_web / "cgi-bin/metrics").read_bytes() != (board / "rootfs-overlay/www/cgi-bin/metrics").read_bytes():
+        fail("generated Prometheus CGI differs from the board overlay source")
     check_dtb(dtb_path)
     check_board_source(board)
     check_image(output / "images")
+    check_rootfs_web(output, board)
     check_memory_layout(output, board)
     check_boot_script(output, board)
     print(f"PASS: resolved configs and compiled {dtb_path.name} match the board contract")
