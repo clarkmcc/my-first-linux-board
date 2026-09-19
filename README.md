@@ -1,6 +1,6 @@
-# Clark's Board
+# my-first-linux-board
 
-Clark's Board is a small F1C200S Linux board built around removable microSD storage, USB-C power and USB device data, a 3.3 V UART console, and power/status LEDs. The repository contains the exact KiCad design used for the assembled board, the working Buildroot firmware source, the final JLCPCB fabrication package, and purchasing files.
+`my-first-linux-board` is a small F1C200S Linux board built around removable microSD storage, USB-C power and USB device data, a 3.3 V UART console, and power/status LEDs. This repository contains the exact KiCad design used for the assembled board, the working Buildroot firmware source, the final JLCPCB fabrication package, and purchasing files.
 
 The assembled board boots U-Boot 2026.01 and Linux 6.19.14 into a minimal BusyBox system. Both boot stages identify it as `Clark's Board`.
 
