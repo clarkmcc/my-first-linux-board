@@ -1,0 +1,393 @@
+{
+  "authorization": "User explicitly requested Fix it after the annotated reset-margin failure. This electrical power revision supersedes historical drawing-only preservation restrictions.",
+  "components": {
+    "U1": {
+      "value": "F1C200s",
+      "mpn": "F1C200S"
+    },
+    "U2": {
+      "value": "TPS62160DGKR",
+      "mpn": "TPS62160DGKR"
+    },
+    "U3": {
+      "value": "TPS62160DGKR",
+      "mpn": "TPS62160DGKR"
+    },
+    "U4": {
+      "value": "TPS62160DGKR",
+      "mpn": "TPS62160DGKR"
+    },
+    "U5": {
+      "value": "TPS2553DBVT",
+      "mpn": "TPS2553DBVT"
+    },
+    "U6": {
+      "value": "TLV75528PDBVR",
+      "mpn": "TLV75528PDBVR"
+    },
+    "U7": {
+      "value": "TPS386000RGPT",
+      "mpn": "TPS386000RGPT"
+    },
+    "L1": {
+      "value": "2.2uH / XFL4020",
+      "mpn": "XFL4020-222MEC"
+    },
+    "L2": {
+      "value": "2.2uH / XFL4020",
+      "mpn": "XFL4020-222MEC"
+    },
+    "L3": {
+      "value": "2.2uH / XFL4020",
+      "mpn": "XFL4020-222MEC"
+    },
+    "Y1": {
+      "value": "24 MHz / CL 18 pF",
+      "mpn": "H130A-24.000-18-2030-EXT-TR"
+    },
+    "J1": {
+      "value": "USB-C / USB4105-GF-A",
+      "mpn": "USB4105-GF-A"
+    },
+    "J2": {
+      "value": "microSD / 104031-0811",
+      "mpn": "104031-0811"
+    },
+    "J3": {
+      "value": "GND / TX / RX",
+      "mpn": "TSW-103-07-G-S"
+    },
+    "D1": {
+      "value": "USBLC6-2SC6",
+      "mpn": "USBLC6-2SC6"
+    },
+    "D2": {
+      "value": "Green LED / low current",
+      "mpn": "APT1608LZGCK"
+    },
+    "D3": {
+      "value": "Green LED / low current",
+      "mpn": "APT1608LZGCK"
+    },
+    "SW1": {
+      "value": "RESET",
+      "mpn": "TL3305AF160QG"
+    },
+    "R1": {
+      "value": "2k / 0.1%",
+      "mpn": "RG1608P-202-B-T5",
+      "purpose": "DDR receivers need a comparison voltage halfway between their supply and ground. R1 and equal-valued R2 divide the DDR supply in half, giving a nominal 1.278049 V reference at the revised target."
+    },
+    "R2": {
+      "value": "2k / 0.1%",
+      "mpn": "RG1608P-202-B-T5"
+    },
+    "R3": {
+      "value": "200k / 1%",
+      "mpn": "RC0603FR-07200KL"
+    },
+    "R4": {
+      "value": "200k / 1%",
+      "mpn": "RC0603FR-07200KL"
+    },
+    "R5": {
+      "value": "5.1k / 1%",
+      "mpn": "CR0603-FX-5101ELF"
+    },
+    "R6": {
+      "value": "5.1k / 1%",
+      "mpn": "CR0603-FX-5101ELF"
+    },
+    "R7": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R8": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R9": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R10": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R11": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R22": {
+      "value": "47k / 1%",
+      "mpn": "RC0603FR-0747KL"
+    },
+    "R12": {
+      "value": "22R",
+      "mpn": "CRCW060322R0FKEA"
+    },
+    "R13": {
+      "value": "67.3k / 0.1%",
+      "mpn": "RN73R1JTTD6732B25",
+      "purpose": "The processor needs to remain in reset when its IO supply is too low. This upper divider resistor sets the nominal IO reset threshold to 3.092 V with R14."
+    },
+    "R14": {
+      "value": "10k / 0.1%",
+      "mpn": "RT0603BRD0710KL"
+    },
+    "R16": {
+      "value": "10k / 0.1%",
+      "mpn": "RT0603BRD0710KL"
+    },
+    "R18": {
+      "value": "10k / 0.1%",
+      "mpn": "TNPW060310K0BYEN",
+      "TCR": "10 ppm/C max",
+      "purpose": "The supervisor senses a fraction of the DDR supply relative to ground. This lower divider resistor completes that ratio, with a 10 ppm/C maximum temperature coefficient to preserve reset-release margin over temperature."
+    },
+    "R20": {
+      "value": "10k / 0.1%",
+      "mpn": "RT0603BRD0710KL"
+    },
+    "R15": {
+      "value": "55.6k / 0.1%",
+      "mpn": "TNPW060355K6BEEA"
+    },
+    "R17": {
+      "value": "48.7k / 0.1%",
+      "mpn": "RQ73C1J48K7BTDF",
+      "TCR": "10 ppm/C max",
+      "purpose": "The supervisor must distinguish a valid DDR supply from a brownout. This upper divider resistor scales DDR voltage to the sense input; its 10 ppm/C maximum temperature coefficient limits drift of the reset threshold."
+    },
+    "R19": {
+      "value": "15.8k / 0.1%",
+      "mpn": "RG1608P-1582-B-T5"
+    },
+    "R21": {
+      "value": "100k / 1%",
+      "mpn": "RC0603FR-07100KL"
+    },
+    "R23": {
+      "value": "340R / 0.1%",
+      "mpn": "RT0603BRD07340RL",
+      "TCR": "25 ppm/C max",
+      "purpose": "The regulator compares a fraction of the core supply against its internal reference to control the output voltage. This low-resistance feedback divider sets the revised target and reduces the voltage error caused by input leakage."
+    },
+    "R24": {
+      "value": "820R / 0.05%",
+      "mpn": "RG1608N-821-W-T1",
+      "TCR": "10 ppm/C max",
+      "purpose": "The regulator compares a fraction of the supply with its internal reference to control its output voltage. This lower divider resistor uses 0.05% tolerance and 10 ppm/C maximum drift to limit output uncertainty while its low resistance reduces feedback-pin leakage error."
+    },
+    "R25": {
+      "value": "1.8k / 0.1%",
+      "mpn": "RG1608P-182-B-T5",
+      "TCR": "25 ppm/C max",
+      "purpose": "The regulator compares a fraction of the DDR supply against its internal reference to control the output voltage. This low-resistance feedback divider sets the revised target and reduces the voltage error caused by input leakage."
+    },
+    "R26": {
+      "value": "820R / 0.05%",
+      "mpn": "RG1608N-821-W-T1",
+      "TCR": "10 ppm/C max",
+      "purpose": "The regulator compares a fraction of the supply with its internal reference to control its output voltage. This lower divider resistor uses 0.05% tolerance and 10 ppm/C maximum drift to limit output uncertainty while its low resistance reduces feedback-pin leakage error."
+    },
+    "R28": {
+      "value": "820R / 0.05%",
+      "mpn": "RG1608N-821-W-T1",
+      "TCR": "10 ppm/C max",
+      "purpose": "The regulator compares a fraction of the supply with its internal reference to control its output voltage. This lower divider resistor uses 0.05% tolerance and 10 ppm/C maximum drift to limit output uncertainty while its low resistance reduces feedback-pin leakage error."
+    },
+    "R27": {
+      "value": "2.67k / 0.1%",
+      "mpn": "RG1608P-2671-B-T5",
+      "TCR": "25 ppm/C max",
+      "purpose": "The regulator compares a fraction of the IO supply against its internal reference to control the output voltage. This low-resistance feedback divider sets the revised target and reduces the voltage error caused by input leakage."
+    },
+    "R29": {
+      "value": "49.9k / 1%",
+      "mpn": "RC0603FR-0749K9L"
+    },
+    "R30": {
+      "value": "1k / 1%",
+      "mpn": "RC0603FR-071KL"
+    },
+    "R31": {
+      "value": "1k / 1%",
+      "mpn": "RC0603FR-071KL"
+    },
+    "C1": {
+      "value": "30p / C0G / 1%",
+      "mpn": "C0603C300F5GACTU"
+    },
+    "C2": {
+      "value": "30p / C0G / 1%",
+      "mpn": "C0603C300F5GACTU"
+    },
+    "C3": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C4": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C5": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C6": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C7": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C9": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C10": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C11": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C12": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C13": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C15": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C16": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C17": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C18": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C19": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C20": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C22": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C30": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C36": {
+      "value": "100n / 100V",
+      "mpn": "GRM188R72A104KA35D"
+    },
+    "C8": {
+      "value": "4.7u / 10V",
+      "mpn": "GRM188R61A475KE15D"
+    },
+    "C14": {
+      "value": "4.7u / 10V",
+      "mpn": "GRM188R61A475KE15D"
+    },
+    "C21": {
+      "value": "4.7u / 10V",
+      "mpn": "GRM188R61A475KE15D"
+    },
+    "C23": {
+      "value": "4.7u / 10V",
+      "mpn": "GRM188R61A475KE15D"
+    },
+    "C24": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C25": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C28": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C29": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C43": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C44": {
+      "value": "1u / 25V",
+      "mpn": "C1608X7R1E105K080AB"
+    },
+    "C26": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C27": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C31": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C37": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C39": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C41": {
+      "value": "10u / 10V",
+      "mpn": "C2012X5R1A106M085AB"
+    },
+    "C38": {
+      "value": "22u / 16V",
+      "mpn": "CL21A226MOCLRNC"
+    },
+    "C40": {
+      "value": "22u / 16V",
+      "mpn": "CL21A226MOCLRNC"
+    },
+    "C42": {
+      "value": "22u / 16V",
+      "mpn": "CL21A226MOCLRNC"
+    }
+  },
+  "rail_targets_V": {
+    "CORE": 1.1317073170731706,
+    "DDR": 2.5560975609756103,
+    "IO": 3.4048780487804877,
+    "ANALOG": 2.8
+  },
+  "retain_net_names": [
+    "+1V1",
+    "+2V5",
+    "+3V3",
+    "+2V8_A"
+  ],
+  "constraints": "Keep every reference, pin/net/no-connect, footprint, UUID, hierarchy and all PCB geometry/routing unchanged. Exact capacitor nominal values unchanged; only rating labels reconciled to selected MPNs. Keep R29=49.9k and all power IC silicon families unchanged. R17/R18 require maximum10ppm/C. Others precision feedback use maximum25ppm/C.",
+  "precision_followup": "R24/R26/R28 use 0.05% 10 ppm/C grades after high-corner startup testing; nominal values, capacitors and routing remain unchanged."
+}

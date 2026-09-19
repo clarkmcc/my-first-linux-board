@@ -1,0 +1,1 @@
+(sym_lib_table (version 7) (lib (name "BootConsole") (type "KiCad") (uri "${KIPRJMOD}/library/BootConsole.kicad_sym") (options "") (descr "Project-local verified pin definitions")))

@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Boot Console <boot-console@example.invalid>
+Date: Thu, 17 Sep 2026 00:00:00 -0600
+Subject: [PATCH] ARM: dts: suniv: name boot console Clark's Board
+
+Keep the upstream Lichee Pi Nano hardware description and compatible strings,
+but report the assembled board's requested product name in the U-Boot banner.
+---
+ dts/upstream/src/arm/allwinner/suniv-f1c100s-licheepi-nano.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dts/upstream/src/arm/allwinner/suniv-f1c100s-licheepi-nano.dts b/dts/upstream/src/arm/allwinner/suniv-f1c100s-licheepi-nano.dts
+index 887c56ef2b..f283577a36 100644
+--- a/dts/upstream/src/arm/allwinner/suniv-f1c100s-licheepi-nano.dts
++++ b/dts/upstream/src/arm/allwinner/suniv-f1c100s-licheepi-nano.dts
+@@ -9,7 +9,7 @@
+ #include <dt-bindings/gpio/gpio.h>
+ 
+ / {
+-	model = "Lichee Pi Nano";
++	model = "Clark's Board";
+ 	compatible = "licheepi,licheepi-nano", "allwinner,suniv-f1c100s";
+ 
+ 	aliases {
+-- 
+2.50.1

@@ -1,0 +1,5 @@
+# Preserve upload artifacts byte-for-byte across clones.
+*.csv text eol=lf
+*.zip -text
+*.png -text
+*.pdf -text

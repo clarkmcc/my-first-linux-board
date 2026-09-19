@@ -1,0 +1,35 @@
+.DS_Store
+
+# KiCad editor state and backups
+*.kicad_prl
+*.kicad_sch-bak
+*.kicad_pcb-bak
+*.bak
+*-backups/
+_autosave-*
+~*.lck
+fp-info-cache
+
+# Firmware downloads, build trees, and generated images
+/firmware/build/
+/firmware/dl/
+/firmware/output/
+/firmware/.case-test/
+
+# Python and local tooling
+__pycache__/
+*.py[cod]
+.venv/
+.cache/
+
+# Editor and local environment files
+.idea/
+.vscode/
+.env
+*.log
+
+# Copperhead run artifacts, if the design is checked again locally
+.copperhead/cache/
+.copperhead/llm-cache/
+.copperhead/renders/
+.copperhead/runs/

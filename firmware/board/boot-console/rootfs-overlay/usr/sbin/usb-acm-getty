@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# BusyBox init respawns this process. Waiting here prevents a missing or late
+# USB gadget TTY from turning into a rapid getty failure loop.
+while :; do
+	while [ ! -c /dev/ttyGS0 ]; do
+		sleep 2
+	done
+
+	/sbin/getty -L ttyGS0 115200 vt100
+	# Bound retries if getty returns immediately while the host is disconnected.
+	sleep 2
+done

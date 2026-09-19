@@ -1,0 +1,5 @@
+56232f9bb0b62be000b40574989da94dd840c32850ec039ca305b99f215cfc20  clarks-board-JLCPCB-gerbers.zip
+bef4e51b3dd1320e527aa059ee50e8468cc470cdf6f63061242adc7ee243a8cd  clarks-board-top-stencil.zip
+d4b07d06e029b735fe0354a2cf6d5f5d29dadda98d3da28040de2bac844b8a24  clarks-board-bottom-stencil.zip
+0ee4e594c58a695c99f3e997986e2c0c21501683d4d25f287447712f490d66e2  assembly/clarks-board-JLCPCB-BOM.csv
+2c1e37f85f5649f41219a0607a8f6b744e7db6ba66524d58a280e1d52733cd7e  assembly/clarks-board-JLCPCB-CPL.csv

@@ -1,0 +1,8 @@
+# F1C200s integrates 64 MiB DDR1. U-Boot's suniv SPL probes the actual size.
+CONFIG_DRAM_CLK=156
+CONFIG_DRAM_ZQ=0
+CONFIG_SYS_BOOTM_LEN=0x1000000
+
+# Keep the SPL/U-Boot console on UART0 PE0/PE1. PF2/PF4 are SDC0 pins.
+CONFIG_CONS_INDEX=1
+CONFIG_BAUDRATE=115200

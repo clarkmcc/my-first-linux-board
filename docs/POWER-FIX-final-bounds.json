@@ -1,0 +1,71 @@
+{
+  "core": {
+    "target": 1.1317073170731706,
+    "min": 1.0903636340005318,
+    "max": 1.1788402454710802,
+    "release_max": 1.0731113047277971,
+    "assert_min": 1.0169218981950672,
+    "cpu_min": 1,
+    "cpu_max": 1.2,
+    "engineering_reserve_V": 0.005,
+    "release_margin_before_reserve": 0.01725232927273468,
+    "release_margin_after_reserve": 0.012252329272734678,
+    "upper_headroom_after_reserve": 0.016159754528919715,
+    "assert_margin": 0.016921898195067175,
+    "feedback_tolerance": 0.001,
+    "feedback_tcr_ppm": 25,
+    "sense_tcr_ppm": 25,
+    "temperature_range_C": [
+      -40,
+      125
+    ],
+    "feedback_bottom_tolerance": 0.0005,
+    "feedback_bottom_TCR_ppm": 10
+  },
+  "ddr": {
+    "target": 2.5560975609756103,
+    "min": 2.457454532943991,
+    "max": 2.668213064258661,
+    "release_max": 2.439480816763527,
+    "assert_min": 2.31560625236527,
+    "cpu_min": 2.3,
+    "cpu_max": 2.7,
+    "engineering_reserve_V": 0.005,
+    "release_margin_before_reserve": 0.01797371618046384,
+    "release_margin_after_reserve": 0.012973716180463838,
+    "upper_headroom_after_reserve": 0.026786935741339394,
+    "assert_margin": 0.015606252365270024,
+    "feedback_tolerance": 0.001,
+    "feedback_tcr_ppm": 25,
+    "sense_tcr_ppm": 10,
+    "temperature_range_C": [
+      -40,
+      125
+    ],
+    "feedback_bottom_tolerance": 0.0005,
+    "feedback_bottom_TCR_ppm": 10
+  },
+  "io": {
+    "target": 3.4048780487804877,
+    "min": 3.2720908905335873,
+    "max": 3.5557160453170127,
+    "release_max": 3.2214804308975165,
+    "assert_min": 3.0408128954764573,
+    "cpu_min": 3.0,
+    "cpu_max": 3.6,
+    "engineering_reserve_V": 0.01,
+    "release_margin_before_reserve": 0.050610459636070804,
+    "release_margin_after_reserve": 0.0406104596360708,
+    "upper_headroom_after_reserve": 0.0342839546829874,
+    "assert_margin": 0.04081289547645728,
+    "feedback_tolerance": 0.001,
+    "feedback_tcr_ppm": 25,
+    "sense_tcr_ppm": 25,
+    "temperature_range_C": [
+      -40,
+      125
+    ],
+    "feedback_bottom_tolerance": 0.0005,
+    "feedback_bottom_TCR_ppm": 10
+  }
+}
