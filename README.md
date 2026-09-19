@@ -42,7 +42,25 @@ firmware/output/images/sdcard.img
 
 The proven board configuration uses one-bit microSD transfers at 12.5 MHz. The physical board has four data traces, but Linux produced data errors in four-bit/25 MHz mode on the first assembly; the conservative setting boots reliably and is therefore the canonical configuration.
 
-UART0 is 115200 baud, 8 data bits, no parity, and one stop bit. Log in as `root` with no password. Linux also configures a USB CDC ACM console after boot.
+UART0 is 115200 baud, 8 data bits, no parity, and one stop bit. Linux also
+creates a composite USB device with a CDC ACM console and a CDC ECM Ethernet
+link. The board is `192.168.7.2/24`; its small DHCP server assigns the attached
+host an address without advertising a default route or DNS server. On macOS,
+connect the USB-C port and then open:
+
+```text
+http://192.168.7.2/
+```
+
+SSH is available as `root` with a blank password:
+
+```sh
+ssh root@192.168.7.2
+```
+
+This passwordless access is intended for a directly attached development
+cable. The first boot stores a generated SSH host key on the FAT boot partition
+so the host fingerprint remains stable while the read-only root stays unchanged.
 
 The status LED appears at:
 
@@ -50,7 +68,7 @@ The status LED appears at:
 /sys/class/leds/boot-console:green:status
 ```
 
-It uses the heartbeat trigger by default. Manual control:
+It uses the CPU `activity` trigger by default. Manual control:
 
 ```sh
 LED=/sys/class/leds/boot-console:green:status

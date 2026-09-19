@@ -5,3 +5,4 @@ tmpfs           /dev/shm        tmpfs   mode=1777,nosuid,nodev   0 0
 tmpfs           /run            tmpfs   mode=0755,nosuid,nodev   0 0
 tmpfs           /tmp            tmpfs   mode=1777,nosuid,nodev   0 0
 tmpfs           /var            tmpfs   mode=0755,nosuid,nodev   0 0
+/dev/mmcblk0p1  /boot           vfat    rw,nosuid,nodev,noexec,umask=0077  0 0

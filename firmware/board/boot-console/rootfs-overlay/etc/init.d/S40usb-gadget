@@ -1,0 +1,39 @@
+#!/bin/sh
+
+helper=/usr/sbin/usb-gadget-setup
+pidfile=/run/usb-gadget-setup.pid
+
+case "$1" in
+	start)
+		if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+			exit 0
+		fi
+		echo "Starting USB serial and Ethernet gadget"
+		"$helper" >/dev/console 2>&1 &
+		echo $! > "$pidfile"
+		;;
+	stop)
+		if [ -s "$pidfile" ]; then
+			kill "$(cat "$pidfile")" 2>/dev/null || true
+			rm -f "$pidfile"
+		fi
+		if [ -s /run/udhcpd.pid ]; then
+			kill "$(cat /run/udhcpd.pid)" 2>/dev/null || true
+			rm -f /run/udhcpd.pid
+		fi
+		if [ -e /sys/kernel/config/usb_gadget/clarks-board/UDC ]; then
+			echo "" > /sys/kernel/config/usb_gadget/clarks-board/UDC
+		fi
+		ifconfig usb0 down 2>/dev/null || true
+		;;
+	restart)
+		"$0" stop
+		"$0" start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}" >&2
+		exit 1
+		;;
+esac
+
+exit 0

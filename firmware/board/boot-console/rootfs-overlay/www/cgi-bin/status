@@ -1,0 +1,25 @@
+#!/bin/sh
+
+printf 'Content-Type: application/json\r\n'
+printf 'Cache-Control: no-store\r\n\r\n'
+
+set -- $(cat /proc/uptime)
+uptime=${1%.*}
+set -- $(cat /proc/loadavg)
+load1=$1
+load5=$2
+load15=$3
+mem_total=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+mem_available=$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)
+set -- $(awk '/^cpu / { print $2+$3+$4+$5+$6+$7+$8, $5+$6 }' /proc/stat)
+cpu_total=$1
+cpu_idle=$2
+model=$(tr -d '\000' < /proc/device-tree/model)
+kernel=$(uname -r)
+host=$(hostname)
+led=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' /sys/class/leds/boot-console:green:status/trigger 2>/dev/null)
+
+printf '{"hostname":"%s","model":"%s","kernel":"%s",' "$host" "$model" "$kernel"
+printf '"uptime_seconds":%s,"load":[%s,%s,%s],' "$uptime" "$load1" "$load5" "$load15"
+printf '"memory_kib":{"total":%s,"available":%s},' "$mem_total" "$mem_available"
+printf '"cpu_ticks":{"total":%s,"idle":%s},"led_trigger":"%s"}\n' "$cpu_total" "$cpu_idle" "$led"

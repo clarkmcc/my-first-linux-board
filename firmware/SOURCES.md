@@ -8,8 +8,9 @@ The build downloads the official Buildroot 2026.02.2 release archive:
 That Buildroot release resolves Linux 6.19.14 and U-Boot 2026.01. The firmware
 started from the upstream Lichee Pi Nano boot flow and keeps its compatible
 hardware initialization while supplying this board's own device tree and
-model name. This external tree intentionally removes networking, SSH, Python,
-C++, WireGuard, NFS, and swap features.
+model name. The target includes only the IPv4 support, Dropbear server, BusyBox
+HTTPD, and BusyBox DHCP server needed for its direct USB Ethernet link. It omits
+Python, C++, Wi-Fi, WireGuard, NFS, and swap features.
 
 The external hash file verifies the Linux archive against kernel.org's signed
 checksum manifest:

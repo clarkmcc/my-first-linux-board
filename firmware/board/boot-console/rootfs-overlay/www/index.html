@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>my-first-linux-board</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #090b0c; color: #edf3ee; display: grid; place-items: center; }
+    main { width: min(760px, 92vw); padding: 3rem 0; }
+    header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    .led { width: .75rem; height: .75rem; border-radius: 50%; background: #4dff88; box-shadow: 0 0 18px #4dff88; }
+    h1 { font: 600 clamp(1.6rem, 5vw, 2.5rem)/1.1 system-ui, sans-serif; margin: 0; }
+    .sub { color: #8ea096; margin: .35rem 0 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem; }
+    .card { border: 1px solid #27312b; border-radius: 14px; padding: 1rem; background: #111613; }
+    .label { color: #89a092; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
+    .value { font-size: 1.35rem; margin-top: .55rem; overflow-wrap: anywhere; }
+    .meter { height: 5px; margin-top: .8rem; background: #253029; border-radius: 9px; overflow: hidden; }
+    .meter span { display: block; height: 100%; width: 0; background: #4dff88; transition: width .5s; }
+    footer { color: #66736b; margin-top: 1.2rem; font-size: .75rem; }
+  </style>
+</head>
+<body>
+<main>
+  <header><span class="led"></span><div><h1>my-first-linux-board</h1><p class="sub" id="identity">Connecting over USB…</p></div></header>
+  <section class="grid">
+    <div class="card"><div class="label">CPU activity</div><div class="value" id="cpu">—</div><div class="meter"><span id="cpuBar"></span></div></div>
+    <div class="card"><div class="label">Memory used</div><div class="value" id="memory">—</div><div class="meter"><span id="memoryBar"></span></div></div>
+    <div class="card"><div class="label">Uptime</div><div class="value" id="uptime">—</div></div>
+    <div class="card"><div class="label">Load average</div><div class="value" id="load">—</div></div>
+    <div class="card"><div class="label">Kernel</div><div class="value" id="kernel">—</div></div>
+    <div class="card"><div class="label">Status LED</div><div class="value" id="led">—</div></div>
+  </section>
+  <footer>192.168.7.2 · live data from /cgi-bin/status</footer>
+</main>
+<script>
+  let previous;
+  const set = (id, value) => document.getElementById(id).textContent = value;
+  const duration = seconds => {
+    const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24,
+      m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+    return `${d ? d + 'd ' : ''}${h}h ${m}m ${s}s`;
+  };
+  async function refresh() {
+    try {
+      const response = await fetch('/cgi-bin/status', {cache: 'no-store'});
+      const data = await response.json();
+      set('identity', `${data.hostname} · ${data.model}`);
+      set('uptime', duration(data.uptime_seconds));
+      set('load', data.load.join(' · '));
+      set('kernel', data.kernel);
+      set('led', data.led_trigger || 'manual');
+      const used = data.memory_kib.total - data.memory_kib.available;
+      const memory = Math.round(100 * used / data.memory_kib.total);
+      set('memory', `${Math.round(used / 1024)} / ${Math.round(data.memory_kib.total / 1024)} MiB`);
+      document.getElementById('memoryBar').style.width = `${memory}%`;
+      if (previous) {
+        const total = data.cpu_ticks.total - previous.total;
+        const idle = data.cpu_ticks.idle - previous.idle;
+        const cpu = total > 0 ? Math.round(100 * (total - idle) / total) : 0;
+        set('cpu', `${cpu}%`);
+        document.getElementById('cpuBar').style.width = `${cpu}%`;
+      }
+      previous = data.cpu_ticks;
+    } catch (_) { set('identity', 'Waiting for board…'); }
+  }
+  refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>

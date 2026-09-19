@@ -1,0 +1,43 @@
+#!/bin/sh
+
+pidfile=/run/dropbear.pid
+runtime_dir=/run/dropbear
+persistent_dir=/boot/dropbear
+
+case "$1" in
+	start)
+		[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && exit 0
+		mkdir -p "$runtime_dir"
+		if grep -q ' /boot ' /proc/mounts; then
+			mkdir -p "$persistent_dir"
+			key="$persistent_dir/dropbear_ed25519_host_key"
+		else
+			key="$runtime_dir/dropbear_ed25519_host_key"
+			echo "WARNING: /boot is not mounted; SSH host key is temporary" >&2
+		fi
+		if [ ! -s "$key" ]; then
+			echo "Generating SSH host key"
+			dropbearkey -t ed25519 -f "$key"
+		fi
+		echo "Starting Dropbear SSH server"
+		# -B permits the intentionally blank root password on this USB-only
+		# development image. The server listens on all current and future links.
+		dropbear -B -r "$key" -P "$pidfile"
+		;;
+	stop)
+		if [ -s "$pidfile" ]; then
+			kill "$(cat "$pidfile")" 2>/dev/null || true
+			rm -f "$pidfile"
+		fi
+		;;
+	restart)
+		"$0" stop
+		"$0" start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}" >&2
+		exit 1
+		;;
+esac
+
+exit 0

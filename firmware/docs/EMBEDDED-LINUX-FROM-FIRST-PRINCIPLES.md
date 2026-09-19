@@ -118,11 +118,21 @@ Configuration layers have different jobs:
 - Linux Kconfig decides which drivers and kernel facilities exist in the binary.
 - The device tree describes this board's instantiated hardware and wiring.
 - Patches change upstream source where configuration alone cannot express the required behavior.
-- The rootfs overlay supplies board-specific files such as `fstab`, `inittab`, and the USB getty wrapper.
+- The rootfs overlay supplies board-specific files such as `fstab`, `inittab`,
+  configfs gadget setup, network services, and the USB getty wrapper.
 
 A device-tree node cannot summon a driver that Kconfig omitted. Conversely, compiling a driver does not prove that hardware exists. For platform devices in this path, Linux populates devices from eligible enabled DT nodes and matches their `compatible` strings against drivers; the kernel documentation describes that `platform_device` to `platform_driver` binding process ([Linux device-tree usage model](https://docs.kernel.org/devicetree/usage-model.html)). Other buses can enumerate children through their own subsystems. Pin control is part of the same contract: enabling UART0 is insufficient unless `pinctrl-0` assigns PE0 and PE1 to UART function.
 
-The USB gadget setup illustrates why a patch exists. The F1C200s native USB controller is configured in peripheral role by `dr_mode = "peripheral"`; the board behaves as a USB device connected to a host, not as a host for keyboards or flash drives. Linux's serial gadget creates an ACM-style serial function and `/dev/ttyGS0`, as documented by the [kernel gadget-serial guide](https://docs.kernel.org/usb/gadget_serial.html). The inherited gadget driver supplies the development USB identity `0525:a4a7`; the project patch makes its configuration descriptor declare a maximum power budget of 500 mA. That declaration informs the host; it does not enforce current. Descriptors tell the host what appeared; they are not the electrical role selection and do not provide early boot transport. A terminal may display 115200 for CDC ACM, but that is line-coding metadata rather than the physical USB signaling rate; 115200 on UART sets actual bit timing on the wire.
+The F1C200s native USB controller is configured in peripheral role by
+`dr_mode = "peripheral"`; the board behaves as a USB device connected to a host,
+not as a host for keyboards or flash drives. A startup script uses the kernel's
+[configfs gadget interface](https://docs.kernel.org/usb/gadget_configfs.html) to
+compose two functions: CDC ACM creates `/dev/ttyGS0`, while CDC ECM creates
+`usb0` and a class-compliant Ethernet interface on macOS. The configuration
+reports itself as bus-powered with a 500 mA maximum load. That descriptor
+informs the host; it neither enforces nor measures current. A terminal may
+display 115200 for CDC ACM, but that is line-coding metadata rather than the
+physical USB signaling rate; 115200 on UART sets actual bit timing on the wire.
 
 UART remains the first console because U-Boot and Linux can drive it with little initialized state. USB enumeration requires clocks, the PHY, controller, gadget framework, descriptors, cable and host cooperation. Power can also be confusing: a USB-C connector may be involved in powering the board while D+/D− still represent a peripheral connection. UART through a 3.3 V adapter, with the adapter's power lead disconnected, gives the cleanest observation of the whole software chain.
 
@@ -130,7 +140,15 @@ UART remains the first console because U-Boot and Linux can drive it with little
 
 The LED is active-low: current flows from `+3V3` through R31 (1 kΩ), through green LED D3, into PC0, and then to ground when PC0 drives low. R31 limits current. Driving PC0 high removes most of the voltage across that series path, so the LED turns off. The suffix `_N` records that electrical polarity. Yet userspace writes `1` to `brightness` to turn it on. That apparent reversal is deliberate abstraction.
 
-The [board DTS](../board/boot-console/linux.dts) declares a `gpio-leds` child, names PC0 as `GPIO_ACTIVE_LOW`, and selects the `heartbeat` trigger. During probing, the GPIO LED driver acquires PC0 with its polarity metadata and registers an LED-class device. sysfs then exposes the class operation as a file. When a shell redirects `1` to `brightness`, `write()` enters the kernel, sysfs parses the value, the LED class invokes the GPIO-backed setter, and the GPIO subsystem converts logical on to electrical low. The pin controller and GPIO driver finally update MMIO registers so package pin 59 changes voltage.
+The [board DTS](../board/boot-console/linux.dts) declares a `gpio-leds` child,
+names PC0 as `GPIO_ACTIVE_LOW`, and selects the `activity` trigger. During
+probing, the GPIO LED driver acquires PC0 with its polarity metadata and
+registers an LED-class device. The activity trigger varies the LED with CPU
+work; sysfs still lets userspace replace that policy. When a shell redirects `1`
+to `brightness`, `write()` enters the kernel, sysfs parses the value, the LED
+class invokes the GPIO-backed setter, and the GPIO subsystem converts logical on
+to electrical low. The pin controller and GPIO driver finally update MMIO
+registers so package pin 59 changes voltage.
 
 ```mermaid
 sequenceDiagram
@@ -149,7 +167,12 @@ sequenceDiagram
 
 This is representative of Linux driver design. Userspace asks for a meaningful operation through a subsystem interface. Board description supplies wiring. A reusable controller driver performs the register access. That separation is why the same shell operation can work across unrelated GPIO controllers. The sysfs path resembles an ordinary file, but writing it invokes kernel code; it does not replace persistent bytes in ext4.
 
-The status LED differs from a power LED wired directly to a rail. Its default heartbeat begins when the kernel's LED trigger runs and may start before a login prompt appears. It is evidence that this kernel mechanism is scheduling, not proof that userspace is healthy. Likewise, a successful sysfs `write()` proves that the kernel accepted the request; only observing D3 proves that the driver, pinmux, PC0 electrical state, resistor, LED orientation, and board wiring agree.
+The status LED differs from a power LED wired directly to a rail. Its default
+activity flicker begins when the kernel's LED trigger runs and reflects time the
+CPU spends outside idle. It is evidence of processor activity, not proof that
+userspace is healthy. Likewise, a successful sysfs `write()` proves that the
+kernel accepted the request; only observing D3 proves that the driver, pinmux,
+PC0 electrical state, resistor, LED orientation, and board wiring agree.
 
 ## Which file do I edit?
 
@@ -170,7 +193,12 @@ After changing the DTS, fragments, patches, or boot script, use the repository's
 
 ## The root filesystem is policy as well as files
 
-The root ext4 filesystem contains BusyBox, configuration, libraries, and device-support files. BusyBox places many commands behind one executable, which reduces storage and dependency cost. Do not infer that a familiar desktop command exists: this image intentionally has no Python, network stack, SSH server, or package manager. Experiments below use only tools configured for this target.
+The root ext4 filesystem contains BusyBox, configuration, libraries, and
+device-support files. BusyBox places many commands behind one executable, which
+reduces storage and dependency cost. This image adds only enough networking for
+the direct ECM link, Dropbear SSH, and BusyBox HTTP/DHCP services; it still has
+no Python or package manager. Experiments below use only tools configured for
+this target.
 
 The root is mounted read-only to make unexpected writes and corruption less likely. Runtime state still needs writable space, so [fstab](../board/boot-console/rootfs-overlay/etc/fstab) mounts `tmpfs` at `/run`, `/tmp`, and `/var`. tmpfs consumes memory and disappears at reboot. `/proc` is a kernel-generated view of processes and kernel state; `/sys` exports kernel objects and controls; `/dev` contains device nodes backed by devtmpfs. These paths look like ordinary directories, but their contents come from kernel filesystems rather than persistent ext4 blocks.
 
@@ -200,7 +228,7 @@ These experiments inspect artifacts or a board already booted according to [BRIN
 ### 1. Distinguish image size from RAM size
 
 ```sh
-# HOST — from boot-console/firmware
+# HOST — from my-first-linux-board/firmware
 stat -f '%N %z bytes' output/images/sdcard.img output/images/zImage output/images/linux.dtb
 ```
 
@@ -248,17 +276,29 @@ echo 1 > /sys/class/leds/boot-console:green:status/brightness
 echo 0 > /sys/class/leds/boot-console:green:status/brightness
 ```
 
-Expect the trigger list to mark `heartbeat` before it is disabled. Logical `1` should illuminate the active-low LED and `0` should extinguish it. If the files exist but light does not change, Linux binding succeeded and the investigation moves toward GPIO state and physical polarity.
+Expect the trigger list to mark `activity` before it is disabled. Logical `1`
+should illuminate the active-low LED and `0` should extinguish it. If the files
+exist but light does not change, Linux binding succeeded and the investigation
+moves toward GPIO state and physical polarity.
 
 ### 6. Separate UART from USB readiness
 
 ```sh
 # TARGET, reached over UART
 ls -l /dev/ttyS0 /dev/ttyGS0
+ifconfig usb0
 dmesg
 ```
 
-The UART console is usable during early boot, before devtmpfs creates `/dev/ttyS0`; by the target-shell stage its device node should exist. The gadget TTY may appear later because its driver stack must initialize. Use the host operating system's normal USB-device inspection after connecting the native USB port; do not expect `lsusb` on this tiny target. The conceptual result is two terminal paths with different initialization dependencies, both eventually supervised by PID 1.
+The UART console is usable during early boot, before devtmpfs creates
+`/dev/ttyS0`; by the target-shell stage its device node should exist. The gadget
+TTY and Ethernet interface may appear later because their driver stack must
+initialize. Use the host operating system's normal USB-device inspection after
+connecting the native USB port; do not expect `lsusb` on this tiny target. The
+conceptual result is two terminal paths with different initialization
+dependencies, plus a network link that exists only after the composite gadget
+and host ECM driver are ready. From the host, `http://192.168.7.2/` shows the
+live status page and `ssh root@192.168.7.2` reaches the same target shell.
 
 ## What the successful build proves
 

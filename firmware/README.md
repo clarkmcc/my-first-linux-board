@@ -4,15 +4,22 @@ This Buildroot external tree creates a minimal microSD image for the F1C200s
 Boot Console. The first milestone boots U-Boot SPL, U-Boot, Linux, and BusyBox
 with a login on UART0 PE0/PE1 at 115200 8N1. UART is the primary bring-up and
 recovery console because it is available before Linux. Linux additionally
-offers a CDC ACM login on the native USB peripheral port as `/dev/ttyGS0`.
+offers a CDC ACM login and CDC ECM Ethernet on the native USB peripheral port.
+The board runs a live status page and Dropbear SSH at `192.168.7.2`.
 
-The image has no network stack, SSH server, package manager, Python, or C++
-runtime. The fixed hardware rails need no PMIC driver. The root ext4 filesystem
+The network stack is limited to the directly attached USB link. A tiny DHCP
+server gives the host a `192.168.7.x` address without a gateway or DNS option,
+so the link does not replace the host's normal Internet route. The image has no
+package manager, Python, or C++ runtime. The fixed hardware rails need no PMIC
+driver. The root ext4 filesystem
 mounts read-only; `/run`, `/tmp`, and `/var` are tmpfs. Development images permit local
-passwordless root login on the physical UART and USB gadget consoles only.
+passwordless root login on the physical UART, USB gadget console, and SSH.
+Treat this as a physically attached development image, not a production security
+configuration. A generated Dropbear host key persists under `/boot/dropbear` on
+the FAT partition; other runtime state remains in RAM.
 The broad upstream `multi_v5_defconfig` retains I2C core and some unrelated
-modules; no I2C controller is enabled in this board's device tree. Network,
-SPI, and sound support resolve disabled.
+modules; no I2C controller is enabled in this board's device tree. Wi-Fi, SPI,
+and sound support resolve disabled.
 
 For a ground-up explanation of how the hardware, boot stages, kernel, device
 tree, and root filesystem fit together, see

@@ -36,7 +36,7 @@
 		status {
 			label = "boot-console:green:status";
 			gpios = <&pio 2 0 GPIO_ACTIVE_LOW>;
-			linux,default-trigger = "heartbeat";
+			linux,default-trigger = "activity";
 			default-state = "off";
 		};
 	};

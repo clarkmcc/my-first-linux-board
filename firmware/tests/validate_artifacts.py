@@ -149,6 +149,8 @@ def check_dtb(dtb: Path) -> None:
     led = node(dts, 'label = "boot-console:green:status"')
     if not re.search(r"gpios = <0x[0-9a-f]+ 0x02 0x00 0x01>", led):
         fail(f"{dtb}: status LED is not PC0 active-low")
+    if 'linux,default-trigger = "activity"' not in led:
+        fail(f"{dtb}: status LED does not default to the CPU activity trigger")
     if "pinctrl-0" in led or "status-led-pc0-pins" in dts:
         fail(f"{dtb}: status LED retains redundant PC0 pinctrl ownership")
 
@@ -166,6 +168,14 @@ def check_board_source(board: Path) -> None:
     image = (board / "genimage.cfg").read_text()
     inittab = (board / "rootfs-overlay/etc/inittab").read_text()
     wrapper = (board / "rootfs-overlay/usr/sbin/usb-acm-getty").read_text()
+    gadget = (board / "rootfs-overlay/usr/sbin/usb-gadget-setup").read_text()
+    gadget_service = (board / "rootfs-overlay/etc/init.d/S40usb-gadget").read_text()
+    dhcp = (board / "rootfs-overlay/etc/udhcpd.conf").read_text()
+    dropbear = (board / "rootfs-overlay/etc/init.d/S50dropbear").read_text()
+    web_service = (board / "rootfs-overlay/etc/init.d/S60webui").read_text()
+    web_page = (board / "rootfs-overlay/www/index.html").read_text()
+    status_cgi = (board / "rootfs-overlay/www/cgi-bin/status").read_text()
+    fstab = (board / "rootfs-overlay/etc/fstab").read_text()
     uboot_patch = (board / "patches/uboot/0001-suniv-licheepi-nano-name-clarks-board.patch").read_text()
     if "root=/dev/mmcblk0p2" not in boot or "rootfstype=ext4 ro" not in boot:
         fail("boot.cmd must select the second, read-only ext4 SD partition")
@@ -177,6 +187,32 @@ def check_board_source(board: Path) -> None:
         fail("USB serial getty wrapper is not supervised by init")
     if "while [ ! -c /dev/ttyGS0 ]" not in wrapper or wrapper.count("sleep 2") < 2:
         fail("USB serial getty wrapper does not rate-limit a late gadget TTY")
+    for required in (
+        'functions/acm.usb0',
+        'functions/ecm.usb0',
+        'echo 0x80 > "$config/bmAttributes"',
+        'echo 500 > "$config/MaxPower"',
+        '192.168.7.2 netmask 255.255.255.0',
+    ):
+        if required not in gadget:
+            fail(f"composite USB gadget setup lacks {required!r}")
+    if 'while [ ! -d /sys/class/net/usb0 ]' not in gadget or 'while :' not in gadget:
+        fail("USB gadget setup does not tolerate delayed UDC/network creation")
+    if 'usb-gadget-setup.pid' not in gadget_service or '>/dev/console 2>&1 &' not in gadget_service:
+        fail("USB gadget setup is not started asynchronously with a runtime PID file")
+    for required in ("start 192.168.7.10", "end 192.168.7.20", "interface usb0", "option subnet 255.255.255.0"):
+        if required not in dhcp:
+            fail(f"USB DHCP configuration lacks {required!r}")
+    if re.search(r"^\s*option\s+(?:router|dns)\b", dhcp, re.M):
+        fail("USB DHCP must not replace the attached host's default route or DNS")
+    if 'persistent_dir=/boot/dropbear' not in dropbear or 'dropbear -B ' not in dropbear:
+        fail("Dropbear does not persist its host key or allow the documented blank development password")
+    if 'httpd -p 80 -h /www' not in web_service:
+        fail("BusyBox HTTPD service does not serve /www on port 80")
+    if 'my-first-linux-board' not in web_page or '/cgi-bin/status' not in web_page or '/proc/uptime' not in status_cgi or '/proc/meminfo' not in status_cgi:
+        fail("status web UI or live JSON endpoint is incomplete")
+    if not re.search(r"^/dev/mmcblk0p1\s+/boot\s+vfat\s+[^\n]*\brw\b", fstab, re.M):
+        fail("FAT boot partition is not mounted read/write for the persistent SSH host key")
     if '-\tmodel = "Lichee Pi Nano";' not in uboot_patch or '+\tmodel = "Clark\'s Board";' not in uboot_patch:
         fail("U-Boot board-name patch does not set the model to Clark's Board")
 
@@ -327,21 +363,30 @@ def main() -> int:
         "BR2_TARGET_ROOTFS_EXT2": "y",
         "BR2_TARGET_GENERIC_REMOUNT_ROOTFS_RW": "n",
         "BR2_REPRODUCIBLE": "y",
+        "BR2_PACKAGE_DROPBEAR": "y",
     })
     require(config(linux_path), linux_path, {
         "CONFIG_ARCH_SUNXI": "y",
         "CONFIG_DEVTMPFS": "y",
         "CONFIG_DEVTMPFS_MOUNT": "y",
         "CONFIG_MMC_SUNXI": "y",
+        "CONFIG_VFAT_FS": "y",
         "CONFIG_SERIAL_8250_CONSOLE": "y",
         "CONFIG_USB_MUSB_SUNXI": "y",
         "CONFIG_USB_MUSB_GADGET": "y",
-        "CONFIG_USB_G_SERIAL": "y",
+        "CONFIG_CONFIGFS_FS": "y",
+        "CONFIG_USB_CONFIGFS": "y",
+        "CONFIG_USB_CONFIGFS_ACM": "y",
+        "CONFIG_USB_CONFIGFS_ECM": "y",
+        "CONFIG_USB_G_SERIAL": "n",
         "CONFIG_USB_GADGET_VBUS_DRAW": "500",
         "CONFIG_USB": "n",
         "CONFIG_NOP_USB_XCEIV": "y",
         "CONFIG_PHY_SUN4I_USB": "y",
         "CONFIG_LEDS_GPIO": "y",
+        "CONFIG_LEDS_TRIGGER_ACTIVITY": "y",
+        "CONFIG_NET": "y",
+        "CONFIG_INET": "y",
         "CONFIG_EXT4_FS": "y",
         "CONFIG_SPI": "n",
     })
@@ -359,6 +404,10 @@ def main() -> int:
         "CONFIG_MOUNT": "y",
         "CONFIG_FEATURE_MOUNT_FSTAB": "y",
         "CONFIG_SH_IS_ASH": "y",
+        "CONFIG_HTTPD": "y",
+        "CONFIG_FEATURE_HTTPD_CGI": "y",
+        "CONFIG_UDHCPD": "y",
+        "CONFIG_IFCONFIG": "y",
     })
     board = Path(__file__).resolve().parents[1] / "board/boot-console"
     check_dtb(dtb_path)

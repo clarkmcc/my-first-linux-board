@@ -1,0 +1,5 @@
+# Small services and tools for the direct USB network link.
+CONFIG_HTTPD=y
+CONFIG_FEATURE_HTTPD_CGI=y
+CONFIG_UDHCPD=y
+CONFIG_IFCONFIG=y

@@ -1,0 +1,69 @@
+#!/bin/sh
+
+set -eu
+
+gadget=/sys/kernel/config/usb_gadget/clarks-board
+config="$gadget/configs/c.1"
+
+# MUSB can appear after userspace starts. Keep this process outside rcS so a
+# late controller does not delay the UART login or the rest of boot.
+while [ ! -d /sys/kernel/config ]; do
+	sleep 1
+done
+
+if ! grep -q ' /sys/kernel/config ' /proc/mounts; then
+	mount -t configfs configfs /sys/kernel/config
+fi
+
+if [ ! -d "$gadget" ]; then
+	mkdir -p "$gadget"
+	echo 0x1d6b > "$gadget/idVendor"
+	echo 0x0104 > "$gadget/idProduct"
+	echo 0x0200 > "$gadget/bcdUSB"
+	echo 0x0100 > "$gadget/bcdDevice"
+	echo 0xef > "$gadget/bDeviceClass"
+	echo 0x02 > "$gadget/bDeviceSubClass"
+	echo 0x01 > "$gadget/bDeviceProtocol"
+
+	mkdir -p "$gadget/strings/0x409"
+	echo CLARKSBOARD0001 > "$gadget/strings/0x409/serialnumber"
+	echo "Clark McCauley" > "$gadget/strings/0x409/manufacturer"
+	echo "Clark's Board Console + Ethernet" > "$gadget/strings/0x409/product"
+
+	mkdir -p "$config/strings/0x409"
+	echo "CDC ACM + CDC ECM" > "$config/strings/0x409/configuration"
+	echo 0x80 > "$config/bmAttributes"
+	# Configfs takes milliamps and encodes the USB 2.0 descriptor in 2 mA units.
+	echo 500 > "$config/MaxPower"
+
+	mkdir -p "$gadget/functions/acm.usb0"
+	mkdir -p "$gadget/functions/ecm.usb0"
+	echo 02:00:00:00:07:02 > "$gadget/functions/ecm.usb0/dev_addr"
+	echo 02:00:00:00:07:01 > "$gadget/functions/ecm.usb0/host_addr"
+	ln -s "$gadget/functions/acm.usb0" "$config/acm.usb0"
+	ln -s "$gadget/functions/ecm.usb0" "$config/ecm.usb0"
+fi
+
+while :; do
+	udc=$(ls /sys/class/udc 2>/dev/null | sed -n '1p')
+	[ -n "$udc" ] && break
+	sleep 1
+done
+
+if [ ! -s "$gadget/UDC" ]; then
+	echo "$udc" > "$gadget/UDC"
+fi
+
+while [ ! -d /sys/class/net/usb0 ]; do
+	sleep 1
+done
+
+ifconfig usb0 192.168.7.2 netmask 255.255.255.0 up
+: > /run/udhcpd.leases
+if [ -s /run/udhcpd.pid ] && kill -0 "$(cat /run/udhcpd.pid)" 2>/dev/null; then
+	:
+else
+	udhcpd /etc/udhcpd.conf
+fi
+
+echo "USB gadget ready: serial ttyGS0, Ethernet 192.168.7.2"
